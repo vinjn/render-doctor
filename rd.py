@@ -1,0 +1,1129 @@
+# RenderDoc Python console, powered by python 3.6.4.
+# The 'pyrenderdoc' object is the current CaptureContext instance.
+# The 'renderdoc' and 'qrenderdoc' modules are available.
+# Documentation is available: https://renderdoc.org/docs/python_api/index.html
+
+# https://casual-effects.com/markdeep/features.md.html
+
+# https://www.python.org/ftp/python/3.6.4/python-3.6.4-amd64.exe
+# https://renderdoc.org/docs/python_api/renderdoc/index.html
+
+# cpu side fetch
+# C:\svn_pool\renderdoc\renderdoc\api\replay\renderdoc_replay.h
+# C:\svn_pool\renderdoc\renderdoc\api\replay\data_types.h
+# C:\svn_pool\renderdoc\renderdoc\api\replay\replay_enums.h
+
+# replay the trace to get state, needs gpu
+# C:\svn_pool\renderdoc\renderdoc\replay\replay_controller.h 
+
+# TODO
+# [] Add a json layer for raw_data_generation, separate raw_data and controller
+# [] Add resource manager, and export to disk
+
+import os
+import sys
+from pathlib import Path, WindowsPath
+import pprint
+from datetime import datetime
+from collections import defaultdict, OrderedDict
+
+sys.path.append('../renderdoc/x64/Development/pymodules')
+sys.path.append('c:/svn_pool/renderdoctor/')
+sys.path.append('d:/svn_pool/renderdoctor/')
+os.environ["PATH"] += os.pathsep + os.path.abspath('../renderdoc/x64/Development')
+
+import renderdoc as rd
+import rd_def
+
+pp = pprint.PrettyPrinter(indent=4)
+
+API_TYPE = None # GraphicsAPI
+IMG_EXT = 'png'
+WRITE_EVENTS = True
+DUMP_PIPELINE = True
+DUMP_RENDER_TARGET = True
+DUMP_TEXTURE = True
+DUMP_DEPTH_BUFFER = True # TODO: figure out a way to visualize depth, disable for now
+DUMP_FAKE_PASSES = False # disabled since I dont like how rdc forms passes
+
+g_is_binding_fbo = True # using this variable to separate passes
+
+# raw data
+g_events = []
+g_resources = {}
+
+markdeep_head = """
+<meta charset="utf-8" emacsmode="-*- markdown -*-">
+<link rel="stylesheet" href="../src/company-api.css">
+<script src="../src/rdc.js" charset="utf-8"></script>
+<script src="../src/markdeep.min.js" charset="utf-8"></script>
+<script src="../src/lazysizes.js" charset="utf-8"></script>\n
+"""
+
+mermaid_head = """
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>\n
+"""
+
+rdc_file = '.rdc'
+
+
+'''
+PPD (Pass - State - Draw) hierachy, there could be other hierachies, so I need to separate <derived data> from <raw data>
+
+Frame
+    - Pass
+        - State
+            - Draw
+                - Event
+                - Event
+                - Event
+            - Draw
+            - Draw
+        - State
+        - State
+    - Pass
+    - Pass
+'''
+
+class Pass:
+    # draws on same FBO
+    def __init__(self):
+        self.pass_id = Pass.s_id
+        Pass.s_id += 1
+        self.states = []
+        self.stateNames = OrderedDict()
+
+    def addState(self, draw):
+        # if len(self.states) > 0 and self.states[0].getName().find('s_') == 0:
+        #     # dummy, replace it
+        #     self.states[0] = State(draw)
+        #     return
+
+        new_state = State(draw)
+        self.states.append(new_state)
+        self.stateNames[new_state.getName()] = None
+        State.current = self.states[-1]
+
+    def getFirstDraw(self):
+        # TODO: this is a wrong assumption, fix it when I have time
+        if len(self.states) == 0:
+            return None
+        return self.states[0].getFirstDraw()
+
+    def getLastDraw(self):
+        # TODO: this is a wrong assumption, fix it when I have time
+        if len(self.states) == 0:
+            return None
+        return self.states[-1].getLastDraw()
+
+    def getName(self):
+        if self.name:
+            return self.name
+
+        pass_info = ""
+        if self.getFirstDraw():
+            # TODO: assume every draws share the same set of targets
+            pass_info = self.getFirstDraw().getPassSummary()
+
+        if not pass_info:
+            self.name = "Pass%d" % (self.pass_id)
+        else:
+            self.name = "Pass%d__%s" % (self.pass_id, pass_info)
+
+        return self.name
+
+    def writeIndexHtml(self, markdown, controller):
+        markdown.write('# %s\n' % (self.getName()))
+        for s in self.states:
+            s.writeIndexHtml(markdown, controller)
+
+    def exportResources(self, controller):
+        for s in self.states:
+            s.exportResources(controller)
+
+    def writeSelfHtml(self, controller):
+        for s in self.states:
+            filename = g_assets_folder / (s.getName() + '.html')
+            if not Path(filename).exists():
+                with open(filename,"w") as self_html:
+                    s.writeSelfHtml(self_html, controller)
+                    print(filename)
+
+    states = None
+    pass_id = None
+    current = None
+    name = None
+    s_id = 0
+
+uid_counters = {}
+
+class State:
+    def __init__(self, draw):
+        self.events = []
+        self.draws = []
+        self.name = 'default_%d' % (State.s_id)
+        State.s_id += 1
+        if draw:
+            unique_name = draw.pso_key
+            if uid_counters.get(unique_name):
+                uid_counters[unique_name] += 1
+                self.name = '%s_%d' % (unique_name, uid_counters[unique_name])
+            else:
+                uid_counters[unique_name] = 0
+                self.name = unique_name
+
+    def getFirstDraw(self):
+        if len(self.draws) == 0:
+            return None
+        
+        return self.draws[0]
+
+    def getLastDraw(self):
+        if len(self.draws) == 0:
+            return None
+        
+        return self.draws[-1]
+
+    def getName(self):
+        return self.name
+
+    def writeIndexHtml(self, markdown, controller):
+        markdown.write('## %s\n' % linkable_get_resource_filename(self.getName(), 'html'))
+        # for ev in self.events:
+        #     ev.writeIndexHtml(markdown, controller)
+        draw_count = len(self.draws)
+        if draw_count == 0:
+            return
+        if draw_count > 1:
+            markdown.write('### draws: %d\n' % draw_count)
+        if draw_count == 1:
+            self.draws[0].writeIndexHtml(markdown, controller)
+        elif draw_count == 2:
+            self.draws[0].writeIndexHtml(markdown, controller)
+            self.draws[1].writeIndexHtml(markdown, controller)
+        else:
+            self.draws[0].writeIndexHtml(markdown, controller)
+            self.draws[int(draw_count/2)].writeIndexHtml(markdown, controller)
+            self.draws[-1].writeIndexHtml(markdown, controller)
+
+        markdown.write('\n')
+
+    def writeSelfHtml(self, markdown, controller):
+        markdown.write(markdeep_head)
+        markdown.write('## %s\n' % (self.getName()))
+        for ev in self.events:
+            ev.writeIndexHtml(markdown, controller)
+
+    def update(self):
+        for ev in self.events:
+            ev.update()
+
+    def exportResources(self, controller):
+        for ev in self.events:
+            ev.exportResources(controller)
+
+    def addEvent(self, ev):
+        self.events.append(ev)
+
+    def addDraw(self, draw):
+        self.events.append(draw)
+        self.draws.append(draw)
+
+    current = None
+    events = None
+    draws = None
+    s_id = 0
+
+class Event:
+    def __init__(self, controller, ev, level = 1):
+        global g_is_binding_fbo
+
+        sdfile = controller.GetStructuredFile()
+        chunks = sdfile.chunks        
+        self.chunk_id = ev.chunkIndex
+        self.event_id = ev.eventId
+        self.level = level
+        # m_StructuredFile->chunks[ev.chunkIndex]->metadata.chunkID
+        # C:\svn_pool\renderdoc\renderdoc\driver\gl\gl_driver.cpp
+
+        # struct SDChunkMetaData
+        # enum class GLChunk
+        cid = chunks[ev.chunkIndex].metadata.chunkID
+        if API_TYPE == rd.GraphicsAPI.OpenGL:
+            event_type = rdc_def.GLChunk(cid)
+        else:
+            event_type = rdc_def.D3D11Chunk(cid)
+        self.name = event_type.name
+
+        if event_type == rdc_def.GLChunk.glBindFramebuffer or \
+             event_type == rdc_def.D3D11Chunk.OMSetRenderTargets or \
+             event_type == rdc_def.D3D11Chunk.OMSetRenderTargetsAndUnorderedAccessViews:
+            if not g_is_binding_fbo:
+                # non fbo call -> fbo call, marks start of a new pass
+                g_frame.addPass()
+            g_is_binding_fbo = True
+        else:
+            if self.name.find('Draw') != -1 \
+            or self.name.find('Dispatch') != -1 \
+            or self.name.find('glDraw') != -1 \
+            or self.name.find('glMultiDraw') != -1 \
+            or self.name.find('glDispatch') != -1:
+                g_is_binding_fbo = False
+        # markdown.write("`event_%04d %s`\n\n" % (eid, chunkID.name))
+
+    def update(self):
+        pass
+
+    def writeIndexHtml(self, markdown, controller):
+        if WRITE_EVENTS:
+            markdown.write("`event_%04d %s`\n\n" % (self.event_id, self.name))
+
+    def exportResources(self, controller):
+        pass
+
+    name = None
+    event_id = None
+    level = None
+    event_type = None
+    chunk_id = None
+
+class Draw(Event):
+    def __init__(self, controller, draw, level = 1):
+        print("draw %d: %s\n" % (draw.drawcallId, draw.name))
+        self.draw_desc = draw
+        self.event_id = draw.eventId
+        self.draw_id = draw.drawcallId
+        self.name = draw.name
+        self.level = level
+        self.pso_key = ""
+        self.shader_names = [None] * rd.ShaderStage.Count
+        self.shader_cb_contents = [None] * rd.ShaderStage.Count
+        self.textures = []
+        self.color_buffers = []
+        self.depth_buffer = None
+
+        global g_assets_folder
+
+        if DUMP_PIPELINE:
+            self.collectPipeline(controller)
+
+        for output in draw.outputs:
+            self.color_buffers.append(output)
+        self.depth_buffer = draw.depthOut
+
+    def isDispatch(self):
+        return self.name.find('Dispatch') != -1
+
+    def collectPipeline(self, controller):
+        controller.SetFrameEvent(self.event_id, False)
+        # pso
+
+        pso = None
+        if API_TYPE == rd.GraphicsAPI.OpenGL:
+            pso = controller.GetGLPipelineState()
+            # C:\svn_pool\renderdoc\renderdoc\api\replay\gl_pipestate.h
+        elif API_TYPE == rd.GraphicsAPI.D3D11:
+            pso = controller.GetD3D11PipelineState()                
+        elif API_TYPE == rd.GraphicsAPI.D3D12:
+            pso = controller.GetD3D12PipelineState()                
+
+        for stage in range(0, rd.ShaderStage.Count):
+            # C:\svn_pool\renderdoc\renderdoc\api\replay\shader_types.h
+            # struct ShaderReflection
+            # TODO: refactor
+            shader = None
+            shader_name = None
+            program_name = ""
+            refl = None
+
+            if stage == 0:
+                shader = pso.vertexShader
+            elif stage == 1:
+                if API_TYPE == rd.GraphicsAPI.OpenGL:                
+                    shader = pso.tessControlShader
+                else:
+                    shader = pso.hullShader
+            elif stage == 2:
+                if API_TYPE == rd.GraphicsAPI.OpenGL:                
+                    shader = pso.tessEvalShader
+                else:
+                    shader = pso.domainShader
+            elif stage == 3:
+                shader = pso.geometryShader                        
+            elif stage == 4:
+                if API_TYPE == rd.GraphicsAPI.OpenGL:                
+                    shader = pso.fragmentShader
+                else:
+                    shader = pso.pixelShader
+            elif stage == 5 and self.isDispatch():
+                shader = pso.computeShader        
+
+            if shader:
+                refl = shader.reflection
+
+            if refl:
+                if hasattr(shader, 'programResourceId'):
+                    program_name = get_resource_name(controller, shader.programResourceId)
+                    shader_name = program_name + '__' + get_resource_name(controller, shader.shaderResourceId)
+                else:
+                    program_name = get_resource_name(controller, shader.resourceId)
+                    shader_name = program_name + '__' + rdc_def.ShaderStage(stage).name
+                self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage)
+                self.shader_names[stage] = shader_name
+                if not self.pso_key:
+                    self.pso_key = program_name
+
+                if self.pso_key != State.current.getName():
+                    # detects a PSO change
+                    # TODO: this is too ugly
+                    Pass.current.addState(self)
+
+                if False:
+                    # ShaderBindpointMapping is empty :()
+                    mapping = shader.bindpointMapping # struct ShaderBindpointMapping
+                    for sampler in mapping.samplers:
+                        print(sampler.name)
+                file_name = get_resource_filename(g_assets_folder / shader_name)
+
+                if not Path(file_name).exists():
+                    with open(file_name, 'wb') as fp:
+                        print("Writing %s" % file_name)
+                        fp.write(refl.rawBytes)
+
+                # C:\svn_pool\renderdoc\renderdoc\api\replay\gl_pipestate.h
+                # struct State
+
+                # TODO: deal with other resources, (atomicBuffers, uniformBuffers, shaderStorageBuffers, images, transformFeedback etc)
+                if hasattr(pso, 'textures') and not self.textures:
+                    for idx, texture in enumerate(pso.textures):
+                        resource_id = texture.resourceId
+                        self.textures.append(resource_id)
+                        if resource_id == rd.ResourceId.Null():
+                            continue
+
+
+    def getPassSummary(self):
+        summary = ''
+        color_count = 0
+        depth_count = 0
+        for resource_id in self.color_buffers:
+            if resource_id != rd.ResourceId.Null():
+                color_count += 1
+        if self.depth_buffer != rd.ResourceId.Null():
+            depth_count += 1
+        if depth_count > 0:
+            summary = 'z'
+        else:
+            summary = ''
+        if color_count > 0:
+            if color_count == 1:
+                summary += 'c'
+            else:
+                summary += '%dc' % (color_count)
+        
+        return summary
+
+    def writeTextureMarkdown(self, markdown, controller, caption_suffix, resource_id, texture_file_name):
+        res_info = get_texture_info(controller, resource_id)
+        res_info_text = '(%dx%d %s)' % (res_info.width, res_info.height, rd.ResourceFormat(res_info.format).Name() )
+        # enum class ResourceFormatType
+        # rdcstr ResourceFormatName(const ResourceFormat &fmt)
+        # markdown.write('<img src="%s" class="lazyload" data-src="%s" width=%s border="2">\n' % ('../src/logo.png', texture_file_name, '50%'))
+        # caption_suffix, res_info_text
+        markdown.write('![%s `%s`](%s class="lazyload" data-src="%s" border="2")' % (caption_suffix, res_info_text, "../src/logo.png", texture_file_name))
+        # markdown.write('![%s `%s`](%s class="lazyload" loading="lazy" border="2")' % (caption_suffix, res_info_text, texture_file_name))
+    
+    def update(self):
+        pass
+
+    def writeIndexHtml(self, markdown, controller):
+        global g_assets_folder
+
+        markdown.write('### [D]%04d %s\n\n' % (self.draw_id, self.name.replace('#', '__')))
+        
+        # color buffer section
+        for idx, resource_id in enumerate(self.color_buffers):
+            if not resource_id or resource_id == rd.ResourceId.Null():
+                continue
+            resource_name = get_resource_name(controller, resource_id)
+            # TODO: ugly
+            file_name = get_resource_filename('%s__%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
+            self.writeTextureMarkdown(markdown, controller, 'c%s: %s' % (idx, resource_name), resource_id, file_name)
+        
+        # depth buffer section
+        if DUMP_DEPTH_BUFFER:
+            if self.depth_buffer != rd.ResourceId.Null():
+                resource_id = self.depth_buffer
+                resource_name = get_resource_name(controller, resource_id)
+                # TODO: ugly again
+                file_name = get_resource_filename('%s__%04d_z' % (resource_name, self.draw_id), IMG_EXT)
+                self.writeTextureMarkdown(markdown, controller, 'z: %s' % (resource_name), resource_id, file_name)
+
+        # texture section
+        markdown.write('\n\n--------\n\n')
+        for idx, resource_id in enumerate(self.textures):
+            if not resource_id or resource_id == rd.ResourceId.Null():
+                continue
+            # if idx > 7: # magic
+                # TODO: uglllllly
+                # break
+            resource_name = get_resource_name(controller, resource_id)
+            file_name = get_resource_filename(resource_name, IMG_EXT)
+            self.writeTextureMarkdown(markdown, controller, 't%s: %s' % (idx, resource_name), resource_id, file_name)
+        
+        # TODO: add UAV / image etc
+
+        # shader section
+        markdown.write('\n\n')
+        for stage in range(0, rd.ShaderStage.Count):
+            if self.shader_names[stage] != None:
+                markdown.write("- %s: %s\n" % (rdc_def.ShaderStage(stage).name, linkable_get_resource_filename(self.shader_names[stage])))
+
+        # cb / constant buffer section
+        resource_name = 'd%04d__cb_contents' % (self.draw_id)
+        file_name = get_resource_filename(resource_name, 'html')
+        with open(g_assets_folder / file_name, 'w') as cb_contents_fp:
+            cb_contents_fp.write(markdeep_head)
+            for stage in range(0, rd.ShaderStage.Count):
+                if self.shader_cb_contents[stage]:
+                    cb_contents_fp.write('# %s\n' % (rdc_def.ShaderStage(stage).name)) # shader type head "VS", "FS" etc
+                    cb_contents_fp.write('```glsl\n')
+                    cb_contents_fp.write(self.shader_cb_contents[stage])
+                    cb_contents_fp.write('\n```\n')
+                    cb_contents_fp.write("\n\n")
+        markdown.write("- %s: %s\n" % ('CB', link_to_file(resource_name, file_name)))
+
+        markdown.write('\n--------\n')
+
+    def exportTexture(self, controller, resource_id, file_name):
+        global g_assets_folder
+
+        file_path = g_assets_folder / file_name
+        if file_path.exists():
+            return
+
+        file_name = str(file_path)
+        res_info = get_texture_info(controller, resource_id)
+
+        texsave = rd.TextureSave()
+        if res_info.creationFlags & rd.TextureCategory.ColorTarget:
+            texsave.alpha = rd.AlphaMapping.Discard
+            texsave.destType = rd.FileType.JPG
+        else:
+            texsave.alpha = rd.AlphaMapping.Preserve
+            texsave.destType = rd.FileType.PNG
+
+        texsave.mip = 0
+        texsave.slice.sliceIndex = 0
+        texsave.resourceId = resource_id
+
+        print("Writing %s" % file_name)
+        controller.SaveTexture(texsave, file_name)
+
+        if not 'pyrenderdoc' in globals() and res_info.creationFlags & rd.TextureCategory.DepthTarget:
+            # equalizeHist
+            try:
+                import cv2
+                import numpy as np
+            except ImportError as error:
+                return
+
+            z_rgb = cv2.imread(file_name)
+            z_r = z_rgb[:, :, 2]
+            equ = cv2.equalizeHist(z_r)
+            # res = np.hstack((z_r,equ)) #stacking images side-by-side
+            cv2.imwrite(file_name, equ)
+
+    def exportResources(self, controller):
+        if not DUMP_RENDER_TARGET and not DUMP_DEPTH_BUFFER and not DUMP_TEXTURE:
+            return
+
+        controller.SetFrameEvent(self.event_id, False)
+
+        # dump textures
+        if DUMP_TEXTURE:
+            for idx, resource_id in enumerate(self.textures):
+                if resource_id == rd.ResourceId.Null():
+                    continue
+                resource_name = get_resource_name(controller, resource_id)
+                file_name = get_resource_filename(resource_name, IMG_EXT)
+                self.exportTexture(controller, resource_id, file_name)
+                
+        # dump render targtes (aka outputs)
+        if DUMP_RENDER_TARGET:
+            for idx, resource_id in enumerate(self.color_buffers):
+                if resource_id != rd.ResourceId.Null():
+                    resource_name = get_resource_name(controller, resource_id)
+                    file_name = get_resource_filename('%s__%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
+                    if DUMP_RENDER_TARGET:
+                        self.exportTexture(controller, resource_id, file_name)
+
+        # depth
+        if DUMP_DEPTH_BUFFER and self.depth_buffer:
+            resource_id = self.depth_buffer
+            if resource_id != rd.ResourceId.Null():
+                resource_name = get_resource_name(controller, resource_id)
+                file_name = get_resource_filename('%s__%04d_z' % (resource_name, self.draw_id), IMG_EXT)
+                if not Path(file_name).exists():
+                    self.exportTexture(controller, resource_id, file_name)
+
+    draw_id = None
+    draw_desc = None # struct DrawcallDescription
+    shader_names = None
+    pso_key = None
+    color_buffers = None
+    depth_buffer = None
+
+class Frame:
+    # 
+    def __init__(self):
+        self.passes = []
+
+        self.addPass()
+        Pass.current.addState(None)
+        self.stateNameDict = defaultdict(int)
+        self.nextStateNameDict = defaultdict(int)
+
+        pass
+
+    def addPass(self):
+        self.passes.append(Pass())
+        Pass.current = self.passes[-1]
+
+    def getImageLinkOrNothing(self, filename):
+        if not filename:
+            return ''
+
+        return '![](%s border="2" width="%s")' % (filename, '50%')
+
+    def writeFrameOverview(self, markdown, controller):
+        markdown.write('# Frame Overview\n')
+
+        markdown.write('pass | states | z | c\n')
+        markdown.write('-----| ------ | --|--\n')
+
+        for p in self.passes:
+            statesSummary = ''
+            for s in p.stateNames:
+                statesSummary += '[%s](%s)<br>' % (s, s +'.html')
+            lastDraw = p.getLastDraw()
+            if not lastDraw:
+                continue
+            c_filenames = [''] * len(lastDraw.color_buffers)
+            z_filename = ''
+            for idx, resource_id in enumerate(lastDraw.color_buffers):
+                if not resource_id or resource_id == rd.ResourceId.Null():
+                    continue
+                resource_name = get_resource_name(controller, resource_id)
+                c_filenames[idx] = get_resource_filename('%s__%04d_c%d' % (resource_name, lastDraw.draw_id, idx), IMG_EXT)
+            
+            # depth buffer section
+            if DUMP_DEPTH_BUFFER:
+                if lastDraw.depth_buffer != rd.ResourceId.Null():
+                    resource_id = lastDraw.depth_buffer
+                    resource_name = get_resource_name(controller, resource_id)
+                    z_filename = get_resource_filename('%s__%04d_z' % (resource_name, lastDraw.draw_id), IMG_EXT)
+
+            c_info = ''
+            for c in c_filenames:
+                c_info += self.getImageLinkOrNothing(c)
+                    
+            markdown.write('[%s](#%s)|%s|%s|%s\n' % (p.getName(), p.getName(), statesSummary, self.getImageLinkOrNothing(z_filename), c_info))
+
+    def writeBindStats(self, markdown, label, item):
+        # TODO: add redundants
+        markdown.write('%s|%d|%d|%d\n' % (label, item.calls, item.sets, item.nulls))
+
+    def getUniqueStateName(self, passName, stateName):
+        self.nextStateNameDict[stateName] += 1
+        if self.stateNameDict[stateName] == 1:
+            return stateName
+        return '%s_%s' % (passName, stateName)
+
+    def writeDAG(self):
+        filename = g_assets_folder / 'dag.html' # TODO: ugly
+        markdown = open(filename, 'w')
+        markdown.write(mermaid_head)
+        markdown.write('<div class="mermaid">\n')
+        markdown.write('flowchart LR\n')
+        pass_count = len(self.passes)
+
+        # subgraph
+        for i in range(0, pass_count):
+            p = self.passes[i]
+            markdown.write('subgraph %s\n' % (p.getName()))
+
+            if True:
+                # set sort
+                states = list(p.stateNames)
+                state_count = len(states)
+                if state_count == 1:
+                    # no siblings
+                    markdown.write('%s\n' % (self.getUniqueStateName(p.getName(), states[0])))
+                else:
+                    for j in range(0, state_count - 1):
+                        markdown.write('%s --> %s\n' % (self.getUniqueStateName(p.getName(), states[j]), self.getUniqueStateName(p.getName(), states[j+1])))
+            else:
+                state_count = len(p.states)
+                if state_count == 1:
+                    # no siblings
+                    markdown.write('%s\n' % (p.states[0].getName()))
+                else:
+                    for j in range(0, state_count - 1):
+                        markdown.write('%s --> %s\n' % (p.states[j].getName(), p.states[j+1].getName()))
+
+            markdown.write('end\n')
+
+            if i < pass_count - 1:
+                # connect neighboring passes, only valid in "flowchart"
+                next = self.passes[i+1]
+                markdown.write('%s -.-> %s\n' % (p.getName(), next.getName()))
+        markdown.writelines('</div>\n\n')
+        
+        # linear order
+        dag = set()
+        # markdown.write('<h1>PSO diagram</h1>\n')
+        # markdown.write('<div class="mermaid">\n')
+        # markdown.write('graph LR\n')
+
+        # state_count = len(g_states)
+        
+        # for i in range(1, state_count):
+        #     src = g_states[i]
+        #     markdown.write('%s ==> %s\n' % (g_states[i-1].name, g_states[i].name))
+        #     for c in src.getFirstDraw().color_buffers:
+        #         if c == rd.ResourceId.Null():
+        #             continue
+        #         for j in range(i+1, state_count):
+        #             dst = g_states[j]
+        #             for t in dst.getFirstDraw().textures:
+        #                 if t == rd.ResourceId.Null():
+        #                     continue                        
+        #                 if c == t:
+        #                     # src.c becomes dst.t
+        #                     dag.add((src, dst, get_resource_name(controller, c)))
+
+        # # TODO: merge linear sort and topology sort
+        # for src, dst, c in dag:
+        #     markdown.write('%s -.->|%s| %s\n' % (src.name, c, dst.name))
+
+        # markdown.writelines('</div>\n\n')
+
+    #   A[Client] -->|tcp_123| B(Load Balancer)
+    #   B -->|tcp_456| C[Server1]
+    #   B -->|tcp_456| D[Server2]
+
+        markdown.close()
+
+    def writeStats(self, markdown, controller):
+        info = controller.GetFrameInfo()
+        stats = info.stats
+        if not stats.recorded:
+            return
+
+        markdown.write('**Draw Call Statistics**\n')
+
+        markdown.write('type | calls | instanced | indirect\n')
+        markdown.write('--------- | ----- | --------- | -------\n')
+        markdown.write('%s|%d|%d|%d\n' % ('Draw', stats.draws.calls, stats.draws.instanced, stats.draws.indirect))
+        markdown.write('%s|%d|%d|%d\n' % ('Dispatch', stats.dispatches.calls, 0, stats.dispatches.indirect))
+        markdown.write('\n--------\n')
+
+        markdown.write('**Resource Update Statistics**\n')
+        markdown.write('calls | cpu_written | cpu_written\n')
+        markdown.write('----- | --------- | -------\n')
+        markdown.write('%d|%d|%d\n' % (stats.updates.calls, stats.updates.clients, stats.updates.servers))
+        markdown.write('\n--------\n')
+
+        markdown.write('**Resource Bind Statistics**\n')
+        markdown.write('tpye | calls | sets | nulls\n')
+        markdown.write('---------- | ----- | ---- | -----\n')
+        # self.writeBindStats(markdown, stats.updates)
+        # markdown.write('%s|%s|%s' % (stats.updates.calls, stats.updates.clients, stats.updates.servers))
+        self.writeBindStats(markdown, 'index buffer binds', stats.indices)
+        self.writeBindStats(markdown, 'vertex buffer binds', stats.vertices)
+        self.writeBindStats(markdown, 'vertex layout binds', stats.layouts)
+        # self.writeBindStats(markdown, 'shader bind statistics', stats.shaders)
+        self.writeBindStats(markdown, 'blend state binds', stats.blends)
+        self.writeBindStats(markdown, 'depth-stencil state binds', stats.depths)
+        self.writeBindStats(markdown, 'rasterizer state binds', stats.rasters)
+        self.writeBindStats(markdown, 'output merger and UAV binds', stats.outputs)
+        markdown.write('\n\n')
+
+    def writeIndexHtml(self, markdown, controller):
+
+        pipelineTypes = [
+                "D3D11",
+                "D3D12",
+                "OpenGL",
+                "Vulkan",
+        ]
+        GPUVendors = [
+            "Unknown",
+            "ARM",
+            "AMD",
+            "Broadcom",
+            "Imagination",
+            "Intel",
+            "nVidia",
+            "Qualcomm",
+            "Verisilicon",
+            "Software",        
+        ]
+        api_prop = controller.GetAPIProperties()
+
+        # Header
+        markdown.write(markdeep_head)
+
+        markdown.write("**RenderDoctor %s**\n\n" % (rdc_file))
+        markdown.write("**Usage**\n\n")
+        markdown.write("  * Press `p` / `shift+p` to jump between Passes\n")
+        markdown.write("  * Press `s` / `shift+s` to jump between States\n")
+        markdown.write("  * Press `d` / `shift+d` to jump between Draws\n")
+        
+        markdown.write('\n--------\n')
+        
+        markdown.write("**Summary**\n\n")
+        markdown.write("  * Experimental feature [pipeline dag](dag.html)\n")
+        markdown.write("  * RDC file: %s\n" % rdc_file)
+        markdown.write("  * Capture API: %s\n" % pipelineTypes[api_prop.pipelineType])
+        # markdown.write("  * Replay API: %s\n" % pipelineTypes[api_prop.localRenderer])
+        markdown.write("  * Vendor: %s\n" % GPUVendors[api_prop.vendor])
+
+        markdown.write('\n--------\n')
+
+        self.writeFrameOverview(markdown, controller)
+        self.writeStats(markdown, controller)
+
+        for p in self.passes:
+            p.writeIndexHtml(markdown, controller)
+
+        markdown.close()
+
+        # self.writeDAG()
+
+    def exportResources(self, controller):
+        for p in self.passes:
+            p.exportResources(controller)        
+
+g_frame = Frame()
+
+class Resource:
+    pass
+
+g_assets_folder = None
+
+def get_resource_filename(name, ext = 'txt'):
+    return '%s.%s' % (name, ext)
+
+def link_to_file(resource_name, file_name):
+    return '[%s](%s)' % (resource_name, file_name)
+
+def linkable_get_resource_filename(name, ext = 'txt'):
+    return link_to_file(name, get_resource_filename(name, ext))
+
+def linkable_ResID(id):
+    return "[ResID_%s](#ResID_%s)" % (id, id)
+
+def anchor_ResID(id):
+    return "<a name=ResID_%s></a>ResID_%s" % (id, id)
+
+def setup_rdc(filename, adb_mode = None):
+
+    if adb_mode:
+        # protocols = rd.GetSupportedDeviceProtocols()
+        protocol_to_use = 'adb'
+        protocol = rd.GetDeviceProtocolController(protocol_to_use)
+        devices = protocol.GetDevices()
+
+        if len(devices) == 0:
+            raise RuntimeError(f"no {protocol_to_use} devices connected")
+
+        # Choose the first device
+        dev = devices[0]
+        name = protocol.GetFriendlyName(dev)
+
+        print(f"Running test on {dev} - named {name}")
+
+        URL = protocol.GetProtocolName() + "://" + dev
+
+    rd.InitialiseReplay(rd.GlobalEnvironment(), [])
+
+    cap = rd.OpenCaptureFile()
+
+    # Open a particular file - see also OpenBuffer to load from memory
+    status = cap.OpenFile(rdc_file, '', None)
+    print("cap.OpenFile")
+
+    # Make sure the file opened successfully
+    if status != rd.ReplayStatus.Succeeded:
+        raise RuntimeError("Couldn't open file: " + str(status))
+
+    # Make sure we can replay
+    if not cap.LocalReplaySupport():
+        raise RuntimeError("Capture cannot be replayed")
+
+    # Initialise the replay
+    status,controller = cap.OpenCapture(rd.ReplayOptions(), None)
+    print("cap.OpenCapture")
+
+    if status != rd.ReplayStatus.Succeeded:
+        raise RuntimeError("Couldn't initialise replay: " + str(status))
+
+    return cap, controller
+
+# Define a recursive function for iterating over draws
+def visit_draw(controller, draw, level = 1):
+    # hack level
+    level = 1
+    if draw.name == 'API Calls':
+        pass
+    
+    # print(rd.GLChunk.glPopGroupMarkerEXT)
+    if draw.events:
+        # api before this draw & including this draw
+        for ev in draw.events:
+            new_event = Event(controller, ev, level+1)
+            State.current.addEvent(new_event)
+
+        if  draw.flags & rd.DrawFlags.Drawcall or draw.flags & rd.DrawFlags.Dispatch or draw.flags & rd.DrawFlags.MultiDraw:
+            new_draw = Draw(controller, draw, level)
+            State.current.addDraw(new_draw)
+    else:
+        # regime call, skip for now
+        pass
+    
+    # Iterate over the draw's children
+    for draw in draw.children:
+        if not visit_draw(controller, draw, level + 1):
+            return False
+
+    return True
+
+def get_texture_info(controller, resource_id):
+    if resource_id == rd.ResourceId.Null():
+        return None
+
+    textures = controller.GetTextures()
+    for res in textures:
+        if resource_id == res.resourceId:
+            return res
+    
+    return None
+
+def get_resource_name(controller, resource_id):
+    if resource_id == rd.ResourceId.Null():
+        return "NULL"
+
+    resources = controller.GetResources()
+    for res in resources:
+        if resource_id == res.resourceId:
+            name = res.name
+            name = name.replace('/', '_').replace('#', '_').replace(' ', '_').replace('(', '_').replace(')', '_').replace('.', '_').replace(':', '_')
+            return name
+
+    return "Res_" + int(resource_id)
+
+def dump_FAKE_passes(controller, draw): # disabled since I dont like how rdc forms passes
+    # Counter for which pass we're in
+    passnum = 0
+    # Counter for how many draws are in the pass
+    passcontents = 0
+    # Whether we've started seeing draws in the pass - i.e. we're past any
+    # starting clear calls that may be batched together
+    inpass = False
+
+    markdown.write("# Passes\n")
+    markdown.write("- Pass #%d\n - starts with %d: %s\n" % (passnum, draw.eventId, draw.name))
+
+    while draw != None:
+        # When we encounter a clear
+        if draw.flags & rd.DrawFlags.Clear:
+            if inpass:
+                markdown.write(" - contained %d draws\n" % (passcontents))
+                passnum += 1
+                markdown.write("- Pass #%d\n - starts with %d: %s\n" % (passnum, draw.eventId, draw.name))
+                passcontents = 0
+                inpass = False
+        else:
+            passcontents += 1
+            inpass = True
+
+        if False:
+            if draw.flags & rd.DrawFlags.Clear: markdown.write("Clear ")
+            if draw.flags & rd.DrawFlags.Drawcall: markdown.write("Drawcall ")
+            if draw.flags & rd.DrawFlags.Dispatch: markdown.write("Dispatch ")
+            if draw.flags & rd.DrawFlags.CmdList: markdown.write("CmdList ")
+            if draw.flags & rd.DrawFlags.SetMarker: markdown.write("SetMarker ")
+            if draw.flags & rd.DrawFlags.PushMarker: markdown.write("PushMarker ")
+            if draw.flags & rd.DrawFlags.PopMarker: markdown.write("PopMarker ")
+            if draw.flags & rd.DrawFlags.Present: markdown.write("Present ")
+            if draw.flags & rd.DrawFlags.MultiDraw: markdown.write("MultiDraw ")
+            if draw.flags & rd.DrawFlags.Copy: markdown.write("Copy ")
+            if draw.flags & rd.DrawFlags.Resolve: markdown.write("Resolve ")
+            if draw.flags & rd.DrawFlags.GenMips: markdown.write("GenMips ")
+            if draw.flags & rd.DrawFlags.PassBoundary: markdown.write("PassBoundary ")
+
+            if draw.flags & rd.DrawFlags.Indexed: markdown.write("Indexed ")
+            if draw.flags & rd.DrawFlags.Instanced: markdown.write("Instanced ")
+            if draw.flags & rd.DrawFlags.Auto: markdown.write("Auto ")
+            if draw.flags & rd.DrawFlags.Indirect: markdown.write("Indirect ")
+            if draw.flags & rd.DrawFlags.ClearColor: markdown.write("ClearColor ")
+            if draw.flags & rd.DrawFlags.ClearDepthStencil: markdown.write("ClearDepthStencil ")
+            if draw.flags & rd.DrawFlags.BeginPass: markdown.write("BeginPass ")
+            if draw.flags & rd.DrawFlags.EndPass: markdown.write("EndPass ")
+            if draw.flags & rd.DrawFlags.APICalls: markdown.write("APICalls ")
+
+        # Advance to the next drawcall
+        draw = draw.next
+
+    if inpass:
+        markdown.write(" - contained %d draws\n" % (passcontents))
+
+def raw_data_generation(controller):
+    # Start iterating from the first real draw as a child of markers
+    # draw type = DrawcallDescription
+    global API_TYPE
+    api_prop = controller.GetAPIProperties()
+    API_TYPE = api_prop.pipelineType
+
+    draws = controller.GetDrawcalls()
+    draw = draws[0]
+
+    while len(draw.children) > 0:
+        draw = draw.children[0]
+
+    if DUMP_FAKE_PASSES: # disabled since I dont like how rdc forms passes
+        dump_FAKE_passes(controller, draw) # disabled since I dont like how rdc forms passes
+
+    # Iterate over all of the root drawcalls
+    for d in draws:
+        visit_draw(controller, d)
+
+    print("raw_data_generation completed")
+
+def derived_data_generation(controller):
+
+    print("derived_data_generation completed")
+
+
+def viz_generation(controller): 
+
+    g_frame.writeIndexHtml(index_html, controller)
+
+    for p in g_frame.passes:
+        p.writeSelfHtml(controller)
+  
+    g_frame.exportResources(controller)
+
+    print("%s\n" % (report_name))
+
+def printVar(v, indent = ''):
+    valstr = indent + v.name + ":\n"
+
+    if len(v.members) == 0:
+        for r in range(0, v.rows):
+            valstr += indent + '  '
+
+            for c in range(0, v.columns):
+                valstr += '%.3f ' % v.value.fv[r*v.columns + c]
+
+            if r < v.rows-1:
+                valstr += "\n"
+
+    for v in v.members:
+        valstr += printVar(v, indent + '    ')
+        valstr += '\n'
+
+    valstr += '\n'
+
+    return valstr
+
+def get_cbuffer_contents(controller, shader_stage):
+    state = controller.GetPipelineState()
+
+    # For some APIs, it might be relevant to set the PSO id or entry point name
+    pipe = state.GetGraphicsPipelineObject()
+    entry = state.GetShaderEntryPoint(shader_stage)
+
+    # Get the pixel shader's reflection object
+    refl = state.GetShaderReflection(shader_stage)
+
+    cb = state.GetConstantBuffer(shader_stage, 0, 0)
+
+    cbufferVars = controller.GetCBufferVariableContents(pipe, refl.resourceId, entry, 0, cb.resourceId, 0, 0)
+
+    contents = ''
+    for v in cbufferVars:
+        contents += printVar(v)
+
+    return contents
+
+def sampleCode(controller):
+    print("Available disassembly formats:")
+
+    targets = controller.GetDisassemblyTargets(True)
+
+    for disasm in targets:
+        print("  - " + disasm)
+
+    target = targets[0]
+
+    state = controller.GetPipelineState()
+
+    # For some APIs, it might be relevant to set the PSO id or entry point name
+    pipe = state.GetGraphicsPipelineObject()
+    entry = state.GetShaderEntryPoint(rd.ShaderStage.Pixel)
+
+    # Get the pixel shader's reflection object
+    ps = state.GetShaderReflection(rd.ShaderStage.Pixel)
+
+    cb = state.GetConstantBuffer(rd.ShaderStage.Pixel, 0, 0)
+
+    print("Pixel shader:")
+    print(controller.DisassembleShader(pipe, ps, target))
+
+    cbufferVars = controller.GetCBufferVariableContents(pipe, ps.resourceId, entry, 0, cb.resourceId, 0, 0)
+
+    for v in cbufferVars:
+        printVar(v)
+
+
+def rdc_main(controller):
+    global g_assets_folder
+    global report_name
+    global index_html
+
+    report_name = g_assets_folder / 'index.html'
+
+    raw_data_generation(controller)
+    derived_data_generation(controller)
+
+    index_html = open(report_name,"w") 
+    viz_generation(controller)
+
+def shutdown_rdc(cap, controller):
+    controller.Shutdown()
+    cap.Shutdown()
+    rd.ShutdownReplay()
+
+if 'pyrenderdoc' in globals():
+    rdc_file = pyrenderdoc.GetCaptureFilename()
+    absolute = WindowsPath(rdc_file).absolute()
+    g_assets_folder = absolute.parent / absolute.stem
+    if False:
+        from datetime import datetime
+        g_assets_folder = g_assets_folder + '-' + datetime.now().strftime("%Y-%b-%d-%H-%M-%S")
+    g_assets_folder.mkdir(parents=True, exist_ok=True)
+    
+    pyrenderdoc.Replay().BlockInvoke(rdc_main)
+else:
+    if len(sys.argv) > 1:
+        rdc_file = sys.argv[1]
+    absolute = WindowsPath(rdc_file).absolute()
+    g_assets_folder = absolute.parent / absolute.stem
+    g_assets_folder.mkdir(parents=True, exist_ok=True)
+
+    cap, controller = setup_rdc(rdc_file)
+    rdc_main(controller)
+    shutdown_rdc(cap, controller)
