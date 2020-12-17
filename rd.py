@@ -28,8 +28,8 @@ from datetime import datetime
 from collections import defaultdict, OrderedDict
 
 sys.path.append('../renderdoc/x64/Development/pymodules')
-sys.path.append('c:/svn_pool/renderdoctor/')
-sys.path.append('d:/svn_pool/renderdoctor/')
+sys.path.append('c:/svn_pool/render-doctor/')
+sys.path.append('d:/svn_pool/render-doctor/')
 os.environ["PATH"] += os.pathsep + os.path.abspath('../renderdoc/x64/Development')
 
 import renderdoc as rd
@@ -250,14 +250,14 @@ class Event:
         # enum class GLChunk
         cid = chunks[ev.chunkIndex].metadata.chunkID
         if API_TYPE == rd.GraphicsAPI.OpenGL:
-            event_type = rdc_def.GLChunk(cid)
+            event_type = rd_def.GLChunk(cid)
         else:
-            event_type = rdc_def.D3D11Chunk(cid)
+            event_type = rd_def.D3D11Chunk(cid)
         self.name = event_type.name
 
-        if event_type == rdc_def.GLChunk.glBindFramebuffer or \
-             event_type == rdc_def.D3D11Chunk.OMSetRenderTargets or \
-             event_type == rdc_def.D3D11Chunk.OMSetRenderTargetsAndUnorderedAccessViews:
+        if event_type == rd_def.GLChunk.glBindFramebuffer or \
+             event_type == rd_def.D3D11Chunk.OMSetRenderTargets or \
+             event_type == rd_def.D3D11Chunk.OMSetRenderTargetsAndUnorderedAccessViews:
             if not g_is_binding_fbo:
                 # non fbo call -> fbo call, marks start of a new pass
                 g_frame.addPass()
@@ -367,7 +367,7 @@ class Draw(Event):
                     shader_name = program_name + '__' + get_resource_name(controller, shader.shaderResourceId)
                 else:
                     program_name = get_resource_name(controller, shader.resourceId)
-                    shader_name = program_name + '__' + rdc_def.ShaderStage(stage).name
+                    shader_name = program_name + '__' + rd_def.ShaderStage(stage).name
                 self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage)
                 self.shader_names[stage] = shader_name
                 if not self.pso_key:
@@ -477,7 +477,7 @@ class Draw(Event):
         markdown.write('\n\n')
         for stage in range(0, rd.ShaderStage.Count):
             if self.shader_names[stage] != None:
-                markdown.write("- %s: %s\n" % (rdc_def.ShaderStage(stage).name, linkable_get_resource_filename(self.shader_names[stage])))
+                markdown.write("- %s: %s\n" % (rd_def.ShaderStage(stage).name, linkable_get_resource_filename(self.shader_names[stage])))
 
         # cb / constant buffer section
         resource_name = 'd%04d__cb_contents' % (self.draw_id)
@@ -486,7 +486,7 @@ class Draw(Event):
             cb_contents_fp.write(markdeep_head)
             for stage in range(0, rd.ShaderStage.Count):
                 if self.shader_cb_contents[stage]:
-                    cb_contents_fp.write('# %s\n' % (rdc_def.ShaderStage(stage).name)) # shader type head "VS", "FS" etc
+                    cb_contents_fp.write('# %s\n' % (rd_def.ShaderStage(stage).name)) # shader type head "VS", "FS" etc
                     cb_contents_fp.write('```glsl\n')
                     cb_contents_fp.write(self.shader_cb_contents[stage])
                     cb_contents_fp.write('\n```\n')
