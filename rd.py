@@ -1554,6 +1554,8 @@ class Pass:
         #     self.states[0] = State(draw)
         #     return
 
+        # print("addState %d" % (len(self.states)))
+
         new_state = State(draw)
         self.states.append(new_state)
         State.current = self.states[-1]
@@ -1693,6 +1695,8 @@ class State:
     events = None
     draws = None
     s_id = 0
+
+State.default = State(None)
 
 class Event:
     def __init__(self, controller, ev, level = 1):
@@ -2040,13 +2044,15 @@ class Frame:
         self.passes = []
 
         self.addPass()
-        Pass.current.addState(None)
         self.stateNameDict = defaultdict(int)
         self.nextStateNameDict = defaultdict(int)
 
         pass
 
     def addPass(self):
+        # print("addPass %d" % (len(self.passes)))
+        State.current = State.default
+
         self.passes.append(Pass())
         Pass.current = self.passes[-1]
 
