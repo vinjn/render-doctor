@@ -1547,7 +1547,6 @@ class Pass:
         self.pass_id = Pass.s_id
         Pass.s_id += 1
         self.states = []
-        self.stateNames = OrderedDict()
 
     def addState(self, draw):
         # if len(self.states) > 0 and self.states[0].getName().find('s_') == 0:
@@ -1557,7 +1556,6 @@ class Pass:
 
         new_state = State(draw)
         self.states.append(new_state)
-        self.stateNames[new_state.getName()] = None
         State.current = self.states[-1]
 
     def getFirstDraw(self):
@@ -1599,7 +1597,7 @@ class Pass:
 
     def writeSelfHtml(self, controller):
         for s in self.states:
-            filename = g_assets_folder / (s.getName() + '.html')
+            filename = g_assets_folder / (s.getUniqueName() + '.html')
             if not Path(filename).exists():
                 with open(filename,"w") as self_html:
                     s.writeSelfHtml(self_html, controller)
@@ -1617,16 +1615,18 @@ class State:
     def __init__(self, draw):
         self.events = []
         self.draws = []
-        self.name = 'default_%d' % (State.s_id)
-        State.s_id += 1
+        self.name = 'default'
+        State.s_id += 1            
+
         if draw:
-            unique_name = draw.pso_key
-            if uid_counters.get(unique_name):
-                uid_counters[unique_name] += 1
-                self.name = '%s_%d' % (unique_name, uid_counters[unique_name])
-            else:
-                uid_counters[unique_name] = 0
-                self.name = unique_name
+            self.name = draw.pso_key
+
+        if self.name in uid_counters:
+            uid_counters[self.name] += 1
+            self.unique_name = '%s_%d' % (self.name, uid_counters[self.name])
+        else:
+            uid_counters[self.name] = 0
+            self.unique_name = self.name
 
     def getFirstDraw(self):
         if len(self.draws) == 0:
@@ -1640,11 +1640,15 @@ class State:
         
         return self.draws[-1]
 
+    def getUniqueName(self):
+        # used in markdown annotation
+        return self.unique_name
+
     def getName(self):
         return self.name
 
     def writeIndexHtml(self, markdown, controller):
-        markdown.write('## %s\n' % linkable_get_resource_filename(self.getName(), 'html'))
+        markdown.write('## %s\n' % linkable_get_resource_filename(self.getUniqueName(), 'html'))
         # for ev in self.events:
         #     ev.writeIndexHtml(markdown, controller)
         draw_count = len(self.draws)
@@ -1666,7 +1670,7 @@ class State:
 
     def writeSelfHtml(self, markdown, controller):
         markdown.write(markdeep_head)
-        markdown.write('## %s\n' % (self.getName()))
+        markdown.write('## %s\n' % (self.getUniqueName()))
         for ev in self.events:
             ev.writeIndexHtml(markdown, controller)
 
@@ -1779,9 +1783,9 @@ class Draw(Event):
             pso = controller.GetGLPipelineState()
             # C:\svn_pool\renderdoc\renderdoc\api\replay\gl_pipestate.h
         elif API_TYPE == rd.GraphicsAPI.D3D11:
-            pso = controller.GetD3D11PipelineState()                
+            pso = controller.GetD3D11PipelineState()
         elif API_TYPE == rd.GraphicsAPI.D3D12:
-            pso = controller.GetD3D12PipelineState()                
+            pso = controller.GetD3D12PipelineState()
 
         for stage in range(0, rd.ShaderStage.Count):
             # C:\svn_pool\renderdoc\renderdoc\api\replay\shader_types.h
@@ -1795,24 +1799,24 @@ class Draw(Event):
             if stage == 0:
                 shader = pso.vertexShader
             elif stage == 1:
-                if API_TYPE == rd.GraphicsAPI.OpenGL:                
+                if API_TYPE == rd.GraphicsAPI.OpenGL:
                     shader = pso.tessControlShader
                 else:
                     shader = pso.hullShader
             elif stage == 2:
-                if API_TYPE == rd.GraphicsAPI.OpenGL:                
+                if API_TYPE == rd.GraphicsAPI.OpenGL:
                     shader = pso.tessEvalShader
                 else:
                     shader = pso.domainShader
             elif stage == 3:
-                shader = pso.geometryShader                        
+                shader = pso.geometryShader
             elif stage == 4:
-                if API_TYPE == rd.GraphicsAPI.OpenGL:                
+                if API_TYPE == rd.GraphicsAPI.OpenGL:
                     shader = pso.fragmentShader
                 else:
                     shader = pso.pixelShader
             elif stage == 5 and self.isDispatch():
-                shader = pso.computeShader        
+                shader = pso.computeShader
 
             if shader:
                 refl = shader.reflection
@@ -2060,8 +2064,8 @@ class Frame:
 
         for p in self.passes:
             statesSummary = ''
-            for s in p.stateNames:
-                statesSummary += '[%s](%s)<br>' % (s, s +'.html')
+            for s in p.states:
+                statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(), s.getUniqueName())
             lastDraw = p.getLastDraw()
             if not lastDraw:
                 continue
@@ -2123,10 +2127,10 @@ class Frame:
                 state_count = len(p.states)
                 if state_count == 1:
                     # no siblings
-                    markdown.write('%s\n' % (p.states[0].getName()))
+                    markdown.write('%s\n' % (p.states[0].getUniqueName()))
                 else:
                     for j in range(0, state_count - 1):
-                        markdown.write('%s --> %s\n' % (p.states[j].getName(), p.states[j+1].getName()))
+                        markdown.write('%s --> %s\n' % (p.states[j].getUniqueName(), p.states[j+1].getUniqueName()))
 
             markdown.write('end\n')
 
@@ -2260,7 +2264,7 @@ class Frame:
 
     def exportResources(self, controller):
         for p in self.passes:
-            p.exportResources(controller)        
+            p.exportResources(controller)
 
 g_frame = Frame()
 
