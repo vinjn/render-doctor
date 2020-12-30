@@ -33,6 +33,16 @@ os.environ["PATH"] += os.pathsep + os.path.abspath('../renderdoc/x64/Development
 
 import renderdoc as rd
 
+API_TYPE = None # GraphicsAPI
+IMG_EXT = 'png'
+WRITE_EVENTS = True
+DUMP_PIPELINE = True
+DUMP_RENDER_TARGET = True
+DUMP_TEXTURE = True
+DUMP_DEPTH_BUFFER = True # TODO: figure out a way to visualize depth, disable for now
+DUMP_FAKE_PASSES = False # disabled since I dont like how rdc forms passes
+DUMP_PSO_DAG = False
+
 class ShaderStage(Enum):
     VS = 0
     HS = auto()
@@ -1659,15 +1669,6 @@ class VulkanChunk(Enum):
 
 pp = pprint.PrettyPrinter(indent=4)
 
-API_TYPE = None # GraphicsAPI
-IMG_EXT = 'png'
-WRITE_EVENTS = True
-DUMP_PIPELINE = True
-DUMP_RENDER_TARGET = True
-DUMP_TEXTURE = True
-DUMP_DEPTH_BUFFER = True # TODO: figure out a way to visualize depth, disable for now
-DUMP_FAKE_PASSES = False # disabled since I dont like how rdc forms passes
-
 g_is_binding_fbo = True # using this variable to separate passes
 
 # raw data
@@ -1949,8 +1950,8 @@ class Draw(Event):
 
     def collectPipeline(self, controller):
         controller.SetFrameEvent(self.event_id, False)
-        # pso
 
+        # pso
         pso = None
         if API_TYPE == rd.GraphicsAPI.OpenGL:
             pso = controller.GetGLPipelineState()
@@ -2014,7 +2015,7 @@ class Draw(Event):
                     Pass.current.addState(self)
 
                 if False:
-                    # ShaderBindpointMapping is empty :()
+                    # TODO: sadly ShaderBindpointMapping is always empty :(
                     mapping = shader.bindpointMapping # struct ShaderBindpointMapping
                     for sampler in mapping.samplers:
                         print(sampler.name)
@@ -2405,8 +2406,9 @@ class Frame:
             "nVidia",
             "Qualcomm",
             "Verisilicon",
-            "Software",        
+            "Software",
         ]
+
         api_prop = controller.GetAPIProperties()
 
         # Header
@@ -2421,11 +2423,12 @@ class Frame:
         markdown.write('\n--------\n')
         
         markdown.write("**Summary**\n\n")
-        markdown.write("  * Experimental feature [pipeline dag](dag.html)\n")
-        markdown.write("  * RDC file: %s\n" % rdc_file)
-        markdown.write("  * Capture API: %s\n" % pipelineTypes[api_prop.pipelineType])
+        if DUMP_PSO_DAG:
+            markdown.write("  * Experimental feature [pipeline dag](dag.html)\n")
+        markdown.write("  * RDC: %s\n" % rdc_file)
+        markdown.write("  * API: %s\n" % pipelineTypes[api_prop.pipelineType])
         # markdown.write("  * Replay API: %s\n" % pipelineTypes[api_prop.localRenderer])
-        markdown.write("  * Vendor: %s\n" % GPUVendors[api_prop.vendor])
+        markdown.write("  * GPU: %s\n" % GPUVendors[api_prop.vendor])
 
         markdown.write('\n--------\n')
 
@@ -2437,11 +2440,14 @@ class Frame:
 
         markdown.close()
 
-        # self.writeDAG()
+        if DUMP_PSO_DAG:
+            self.writeDAG()
 
     def exportResources(self, controller):
+        print('^exportResources')
         for p in self.passes:
             p.exportResources(controller)
+        print('$exportResources')
 
 g_frame = Frame()
 
@@ -2618,11 +2624,13 @@ def dump_FAKE_passes(controller, draw): # disabled since I dont like how rdc for
         markdown.write(" - contained %d draws\n" % (passcontents))
 
 def raw_data_generation(controller):
+    print('^raw_data_generation')
     # Start iterating from the first real draw as a child of markers
     # draw type = DrawcallDescription
     global API_TYPE
     api_prop = controller.GetAPIProperties()
     API_TYPE = api_prop.pipelineType
+    print('API_TYPE', API_TYPE)
 
     draws = controller.GetDrawcalls()
     draw = draws[0]
@@ -2637,22 +2645,24 @@ def raw_data_generation(controller):
     for d in draws:
         visit_draw(controller, d)
 
-    print("raw_data_generation completed")
+    print('$raw_data_generation')
 
 def derived_data_generation(controller):
 
-    print("derived_data_generation completed")
+    print('^derived_data_generation')
+    
+    print('$derived_data_generation')
 
 
 def viz_generation(controller): 
-
+    print('^viz_generation')
     g_frame.writeIndexHtml(index_html, controller)
 
     for p in g_frame.passes:
         p.writeSelfHtml(controller)
   
     g_frame.exportResources(controller)
-
+    print('$viz_generation')
     print("%s\n" % (report_name))
 
 def printVar(v, indent = ''):
