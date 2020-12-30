@@ -1490,6 +1490,172 @@ class D3D11Chunk(Enum):
     
     Count = auto()
 
+class VulkanChunk(Enum):
+    Dummy = 0
+
+    # C:\svn_pool\renderdoc\renderdoc\core\core.h
+    DriverInit = 1
+    InitialContentsList = auto()
+    InitialContents = auto()
+    CaptureBegin = auto()
+    CaptureScope = auto()
+    CaptureEnd = auto()
+
+    FirstDriverChunk = 1000
+
+    vkCreateDevice = auto()
+    vkGetDeviceQueue = auto()
+    vkAllocateMemory = auto()
+    vkUnmapMemory = auto()
+    vkFlushMappedMemoryRanges = auto()
+    vkCreateCommandPool = auto()
+    vkResetCommandPool = auto()
+    vkAllocateCommandBuffers = auto()
+    vkCreateFramebuffer = auto()
+    vkCreateRenderPass = auto()
+    vkCreateDescriptorPool = auto()
+    vkCreateDescriptorSetLayout = auto()
+    vkCreateBuffer = auto()
+    vkCreateBufferView = auto()
+    vkCreateImage = auto()
+    vkCreateImageView = auto()
+    vkCreateDepthTargetView = auto()
+    vkCreateSampler = auto()
+    vkCreateShaderModule = auto()
+    vkCreatePipelineLayout = auto()
+    vkCreatePipelineCache = auto()
+    vkCreateGraphicsPipelines = auto()
+    vkCreateComputePipelines = auto()
+    vkGetSwapchainImagesKHR = auto()
+    vkCreateSemaphore = auto()
+    vkCreateFence = auto()
+    vkGetFenceStatus = auto()
+    vkResetFences = auto()
+    vkWaitForFences = auto()
+    vkCreateEvent = auto()
+    vkGetEventStatus = auto()
+    vkSetEvent = auto()
+    vkResetEvent = auto()
+    vkCreateQueryPool = auto()
+    vkAllocateDescriptorSets = auto()
+    vkUpdateDescriptorSets = auto()
+    vkBeginCommandBuffer = auto()
+    vkEndCommandBuffer = auto()
+    vkQueueWaitIdle = auto()
+    vkDeviceWaitIdle = auto()
+    vkQueueSubmit = auto()
+    vkBindBufferMemory = auto()
+    vkBindImageMemory = auto()
+    vkQueueBindSparse = auto()
+    vkCmdBeginRenderPass = auto()
+    vkCmdNextSubpass = auto()
+    vkCmdExecuteCommands = auto()
+    vkCmdEndRenderPass = auto()
+    vkCmdBindPipeline = auto()
+    vkCmdSetViewport = auto()
+    vkCmdSetScissor = auto()
+    vkCmdSetLineWidth = auto()
+    vkCmdSetDepthBias = auto()
+    vkCmdSetBlendConstants = auto()
+    vkCmdSetDepthBounds = auto()
+    vkCmdSetStencilCompareMask = auto()
+    vkCmdSetStencilWriteMask = auto()
+    vkCmdSetStencilReference = auto()
+    vkCmdBindDescriptorSets = auto()
+    vkCmdBindVertexBuffers = auto()
+    vkCmdBindIndexBuffer = auto()
+    vkCmdCopyBufferToImage = auto()
+    vkCmdCopyImageToBuffer = auto()
+    vkCmdCopyBuffer = auto()
+    vkCmdCopyImage = auto()
+    vkCmdBlitImage = auto()
+    vkCmdResolveImage = auto()
+    vkCmdUpdateBuffer = auto()
+    vkCmdFillBuffer = auto()
+    vkCmdPushConstants = auto()
+    vkCmdClearColorImage = auto()
+    vkCmdClearDepthStencilImage = auto()
+    vkCmdClearAttachments = auto()
+    vkCmdPipelineBarrier = auto()
+    vkCmdWriteTimestamp = auto()
+    vkCmdCopyQueryPoolResults = auto()
+    vkCmdBeginQuery = auto()
+    vkCmdEndQuery = auto()
+    vkCmdResetQueryPool = auto()
+    vkCmdSetEvent = auto()
+    vkCmdResetEvent = auto()
+    vkCmdWaitEvents = auto()
+    vkCmdDraw = auto()
+    vkCmdDrawIndirect = auto()
+    vkCmdDrawIndexed = auto()
+    vkCmdDrawIndexedIndirect = auto()
+    vkCmdDispatch = auto()
+    vkCmdDispatchIndirect = auto()
+    vkCmdDebugMarkerBeginEXT = auto()
+    vkCmdDebugMarkerInsertEXT = auto()
+    vkCmdDebugMarkerEndEXT = auto()
+    vkDebugMarkerSetObjectNameEXT = auto()
+    vkCreateSwapchainKHR = auto()
+    SetShaderDebugPath = auto()
+    vkRegisterDeviceEventEXT = auto()
+    vkRegisterDisplayEventEXT = auto()
+    vkCmdIndirectSubCommand = auto()
+    vkCmdPushDescriptorSetKHR = auto()
+    vkCmdPushDescriptorSetWithTemplateKHR = auto()
+    vkCreateDescriptorUpdateTemplate = auto()
+    vkUpdateDescriptorSetWithTemplate = auto()
+    vkBindBufferMemory2 = auto()
+    vkBindImageMemory2 = auto()
+    vkCmdWriteBufferMarkerAMD = auto()
+    vkSetDebugUtilsObjectNameEXT = auto()
+    vkQueueBeginDebugUtilsLabelEXT = auto()
+    vkQueueEndDebugUtilsLabelEXT = auto()
+    vkQueueInsertDebugUtilsLabelEXT = auto()
+    vkCmdBeginDebugUtilsLabelEXT = auto()
+    vkCmdEndDebugUtilsLabelEXT = auto()
+    vkCmdInsertDebugUtilsLabelEXT = auto()
+    vkCreateSamplerYcbcrConversion = auto()
+    vkCmdSetDeviceMask = auto()
+    vkCmdDispatchBase = auto()
+    vkGetDeviceQueue2 = auto()
+    vkCmdDrawIndirectCount = auto()
+    vkCmdDrawIndexedIndirectCount = auto()
+    vkCreateRenderPass2 = auto()
+    vkCmdBeginRenderPass2 = auto()
+    vkCmdNextSubpass2 = auto()
+    vkCmdEndRenderPass2 = auto()
+    vkCmdBindTransformFeedbackBuffersEXT = auto()
+    vkCmdBeginTransformFeedbackEXT = auto()
+    vkCmdEndTransformFeedbackEXT = auto()
+    vkCmdBeginQueryIndexedEXT = auto()
+    vkCmdEndQueryIndexedEXT = auto()
+    vkCmdDrawIndirectByteCountEXT = auto()
+    vkCmdBeginConditionalRenderingEXT = auto()
+    vkCmdEndConditionalRenderingEXT = auto()
+    vkCmdSetSampleLocationsEXT = auto()
+    vkCmdSetDiscardRectangleEXT = auto()
+    DeviceMemoryRefs = auto()
+    vkResetQueryPool = auto()
+    ImageRefs = auto()
+    vkCmdSetLineStippleEXT = auto()
+    vkGetSemaphoreCounterValue = auto()
+    vkWaitSemaphores = auto()
+    vkSignalSemaphore = auto()
+    vkQueuePresentKHR = auto()
+    vkCmdSetCullModeEXT = auto()
+    vkCmdSetFrontFaceEXT = auto()
+    vkCmdSetPrimitiveTopologyEXT = auto()
+    vkCmdSetViewportWithCountEXT = auto()
+    vkCmdSetScissorWithCountEXT = auto()
+    vkCmdBindVertexBuffers2EXT = auto()
+    vkCmdSetDepthTestEnableEXT = auto()
+    vkCmdSetDepthWriteEnableEXT = auto()
+    vkCmdSetDepthCompareOpEXT = auto()
+    vkCmdSetDepthBoundsTestEnableEXT = auto()
+    vkCmdSetStencilTestEnableEXT = auto()
+    vkCmdSetStencilOpEXT = auto()
+    CoherentMapWrite = auto()
+    Max = auto()
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -1715,11 +1881,14 @@ class Event:
         cid = chunks[ev.chunkIndex].metadata.chunkID
         if API_TYPE == rd.GraphicsAPI.OpenGL:
             event_type = GLChunk(cid)
+        elif API_TYPE == rd.GraphicsAPI.Vulkan:
+            event_type = VulkanChunk(cid)
         else:
             event_type = D3D11Chunk(cid)
         self.name = event_type.name
 
         if event_type == GLChunk.glBindFramebuffer or \
+            event_type == VulkanChunk.vkCmdBeginRenderPass or \
              event_type == D3D11Chunk.OMSetRenderTargets or \
              event_type == D3D11Chunk.OMSetRenderTargetsAndUnorderedAccessViews:
             if not g_is_binding_fbo:
@@ -1790,6 +1959,8 @@ class Draw(Event):
             pso = controller.GetD3D11PipelineState()
         elif API_TYPE == rd.GraphicsAPI.D3D12:
             pso = controller.GetD3D12PipelineState()
+        elif API_TYPE == rd.GraphicsAPI.Vulkan:
+            pso = controller.GetVulkanPipelineState()
 
         for stage in range(0, rd.ShaderStage.Count):
             # C:\svn_pool\renderdoc\renderdoc\api\replay\shader_types.h
@@ -1803,19 +1974,19 @@ class Draw(Event):
             if stage == 0:
                 shader = pso.vertexShader
             elif stage == 1:
-                if API_TYPE == rd.GraphicsAPI.OpenGL:
+                if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
                     shader = pso.tessControlShader
                 else:
                     shader = pso.hullShader
             elif stage == 2:
-                if API_TYPE == rd.GraphicsAPI.OpenGL:
+                if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
                     shader = pso.tessEvalShader
                 else:
                     shader = pso.domainShader
             elif stage == 3:
                 shader = pso.geometryShader
             elif stage == 4:
-                if API_TYPE == rd.GraphicsAPI.OpenGL:
+                if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
                     shader = pso.fragmentShader
                 else:
                     shader = pso.pixelShader
