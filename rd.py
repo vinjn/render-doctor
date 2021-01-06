@@ -1776,7 +1776,7 @@ class Pass:
     pass_id = None
     current = None
     name = None
-    s_id = 0
+    s_id = 1
 
 uid_counters = {}
 
@@ -2042,11 +2042,16 @@ class Draw(Event):
         summary = ''
         color_count = 0
         depth_count = 0
+        res_info = None
         for resource_id in self.color_buffers:
             if resource_id != rd.ResourceId.Null():
                 color_count += 1
+                if not res_info:
+                    res_info = get_texture_info(controller, resource_id)
         if self.depth_buffer != rd.ResourceId.Null():
             depth_count += 1
+            if not res_info:
+                res_info = get_texture_info(controller, resource_id)            
         if depth_count > 0:
             summary = 'z'
         else:
@@ -2056,7 +2061,8 @@ class Draw(Event):
                 summary += 'c'
             else:
                 summary += '%dc' % (color_count)
-        
+        if res_info:
+            summary = '%s_%dx%d' % (summary, res_info.width, res_info.height)
         return summary
 
     def writeTextureMarkdown(self, markdown, controller, caption_suffix, resource_id, texture_file_name):
@@ -2237,13 +2243,22 @@ class Frame:
     def writeFrameOverview(self, markdown, controller):
         markdown.write('# Frame Overview\n')
 
-        markdown.write('pass | states | z | c\n')
-        markdown.write('-----| ------ | --|--\n')
+        markdown.write('pass | states | draws | z | c\n')
+        markdown.write('-----| ------ | ------| - |--\n')
 
         for p in self.passes:
             statesSummary = ''
+            drawsSummary = ''
+            draws = 0
+            states = 0
             for s in p.states:
                 statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(), s.getUniqueName())
+                drawsSummary += '%d<br>' % (len(s.draws))
+                draws += len(s.draws)
+                states += 1
+            if states > 1:
+                statesSummary = '<%d><br>' % states  + statesSummary
+                drawsSummary = '<%d><br>' % draws + drawsSummary
             lastDraw = p.getLastDraw()
             if not lastDraw:
                 continue
@@ -2266,7 +2281,7 @@ class Frame:
             for c in c_filenames:
                 c_info += self.getImageLinkOrNothing(c)
                     
-            markdown.write('[%s](#%s)|%s|%s|%s\n' % (p.getName(), p.getName(), statesSummary, self.getImageLinkOrNothing(z_filename), c_info))
+            markdown.write('[%s](#%s)|%s|%s|%s|%s\n' % (p.getName(), p.getName(), statesSummary, drawsSummary, self.getImageLinkOrNothing(z_filename), c_info))
 
     def writeBindStats(self, markdown, label, item):
         # TODO: add redundants
