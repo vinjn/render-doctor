@@ -2468,7 +2468,12 @@ class Frame:
         markdown.write("**render-doctor %s**\n\n" % (rdc_file))
 
         self.writeFrameOverview(markdown, controller)
-        self.writeStats(markdown, controller)        
+        self.writeStats(markdown, controller)
+
+        markdown.write('\n--------\n')
+
+        for p in self.passes:
+            p.writeIndexHtml(markdown, controller)
 
         markdown.write("**Usage**\n\n")
         markdown.write("  * Press `p` / `shift+p` to jump between Passes\n")
@@ -2484,12 +2489,7 @@ class Frame:
         markdown.write("  * API: %s\n" % pipelineTypes[api_prop.pipelineType])
         # markdown.write("  * Replay API: %s\n" % pipelineTypes[api_prop.localRenderer])
         markdown.write("  * GPU: %s\n" % GPUVendors[api_prop.vendor])
-
-        markdown.write('\n--------\n')
-
-        for p in self.passes:
-            p.writeIndexHtml(markdown, controller)
-
+        
         markdown.close()
 
         if DUMP_PSO_DAG:
