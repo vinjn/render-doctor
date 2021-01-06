@@ -2465,8 +2465,11 @@ class Frame:
 
         # Header
         markdown.write(markdeep_head)
+        markdown.write("**render-doctor %s**\n\n" % (rdc_file))
 
-        markdown.write("**RenderDoctor %s**\n\n" % (rdc_file))
+        self.writeFrameOverview(markdown, controller)
+        self.writeStats(markdown, controller)        
+
         markdown.write("**Usage**\n\n")
         markdown.write("  * Press `p` / `shift+p` to jump between Passes\n")
         markdown.write("  * Press `s` / `shift+s` to jump between States\n")
@@ -2483,9 +2486,6 @@ class Frame:
         markdown.write("  * GPU: %s\n" % GPUVendors[api_prop.vendor])
 
         markdown.write('\n--------\n')
-
-        self.writeFrameOverview(markdown, controller)
-        self.writeStats(markdown, controller)
 
         for p in self.passes:
             p.writeIndexHtml(markdown, controller)
