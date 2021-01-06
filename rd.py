@@ -2062,12 +2062,12 @@ class Draw(Event):
             else:
                 summary += '%dc' % (color_count)
         if res_info:
-            summary = '%s_%dx%d' % (summary, res_info.width, res_info.height)
+            summary = '%s_%dX%d' % (summary, res_info.width, res_info.height)
         return summary
 
     def writeTextureMarkdown(self, markdown, controller, caption_suffix, resource_id, texture_file_name):
         res_info = get_texture_info(controller, resource_id)
-        res_info_text = '(%dx%d %s)' % (res_info.width, res_info.height, rd.ResourceFormat(res_info.format).Name() )
+        res_info_text = '(%dX%d %s)' % (res_info.width, res_info.height, rd.ResourceFormat(res_info.format).Name() )
         # enum class ResourceFormatType
         # rdcstr ResourceFormatName(const ResourceFormat &fmt)
         # markdown.write('<img src="%s" class="lazyload" data-src="%s" width=%s border="2">\n' % ('../src/logo.png', texture_file_name, '50%'))
@@ -2243,25 +2243,57 @@ class Frame:
     def writeFrameOverview(self, markdown, controller):
         markdown.write('# Frame Overview\n')
 
-        markdown.write('pass | states | draws | z | c\n')
-        markdown.write('-----| ------ | ------| - |--\n')
+        markdown.write('pass|states|draws|verts|calls|z|c\n')
+        markdown.write('----|------|-----|-----|-----|-|-\n')
+        overviewText = ''
 
+        totalPasses = 0
+        totalStates = 0
+        totalDraws = 0
+        totalCalls = 0
+        totalVerts = 0
         for p in self.passes:
             statesSummary = ''
             drawsSummary = ''
+            callsSummary = ''
+            vertsSummary = ''
             draws = 0
             states = 0
+            calls = 0
+            verts = 0
             for s in p.states:
                 statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(), s.getUniqueName())
                 drawsSummary += '%d<br>' % (len(s.draws))
+
+                c = 0
+                v = 0
                 draws += len(s.draws)
+                for d in s.draws:
+                    c += len(d.draw_desc.events)
+                    v += d.draw_desc.numIndices
+
+                callsSummary += '%d<br>' % c
+                vertsSummary += '%d<br>' % v
+                calls += c
+                verts += v
                 states += 1
+
             if states > 1:
-                statesSummary = '<%d><br>' % states  + statesSummary
-                drawsSummary = '<%d><br>' % draws + drawsSummary
+                statesSummary = '~%d<br>' % states  + statesSummary
+                drawsSummary = '~%d<br>' % draws + drawsSummary
+                callsSummary = '~%d<br>' % calls + callsSummary
+                vertsSummary = '~%d<br>' % verts + vertsSummary
             lastDraw = p.getLastDraw()
             if not lastDraw:
                 continue
+
+            # total stats
+            totalPasses += 1
+            totalStates += states
+            totalDraws += draws
+            totalCalls += calls
+            totalVerts += verts
+
             c_filenames = [''] * len(lastDraw.color_buffers)
             z_filename = ''
             for idx, resource_id in enumerate(lastDraw.color_buffers):
@@ -2281,7 +2313,12 @@ class Frame:
             for c in c_filenames:
                 c_info += self.getImageLinkOrNothing(c)
                     
-            markdown.write('[%s](#%s)|%s|%s|%s|%s\n' % (p.getName(), p.getName(), statesSummary, drawsSummary, self.getImageLinkOrNothing(z_filename), c_info))
+            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s\n' % 
+            (p.getName(), p.getName(), statesSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
+        overviewText = ('%s|%s|%s|%s|%s|%s|%s\n' % 
+        ('Total passes: %d' % totalPasses, 'Total states: %d' % totalStates, '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
+
+        markdown.write(overviewText)
 
     def writeBindStats(self, markdown, label, item):
         # TODO: add redundants
