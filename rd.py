@@ -1739,14 +1739,14 @@ class Pass:
             return None
         return self.states[-1].getLastDraw()
 
-    def getName(self):
+    def getName(self, controller):
         if self.name:
             return self.name
 
         pass_info = ""
-        if self.getFirstDraw():
+        if self.getLastDraw():
             # TODO: assume every draws share the same set of targets
-            pass_info = self.getFirstDraw().getPassSummary()
+            pass_info = self.getLastDraw().getPassSummary(controller)
 
         if not pass_info:
             self.name = "Pass%d" % (self.pass_id)
@@ -1756,7 +1756,7 @@ class Pass:
         return self.name
 
     def writeIndexHtml(self, markdown, controller):
-        markdown.write('# %s\n' % (self.getName()))
+        markdown.write('# %s\n' % (self.getName(controller)))
         for s in self.states:
             s.writeIndexHtml(markdown, controller)
 
@@ -2038,7 +2038,7 @@ class Draw(Event):
                             continue
 
 
-    def getPassSummary(self):
+    def getPassSummary(self, controller):
         summary = ''
         color_count = 0
         depth_count = 0
@@ -2051,7 +2051,7 @@ class Draw(Event):
         if self.depth_buffer != rd.ResourceId.Null():
             depth_count += 1
             if not res_info:
-                res_info = get_texture_info(controller, resource_id)            
+                res_info = get_texture_info(controller, self.depth_buffer)            
         if depth_count > 0:
             summary = 'z'
         else:
@@ -2262,7 +2262,7 @@ class Frame:
             calls = 0
             verts = 0
             for s in p.states:
-                statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(), s.getUniqueName())
+                statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(controller), s.getUniqueName())
                 drawsSummary += '%d<br>' % (len(s.draws))
 
                 c = 0
@@ -2314,7 +2314,7 @@ class Frame:
                 c_info += self.getImageLinkOrNothing(c)
                     
             overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s\n' % 
-            (p.getName(), p.getName(), statesSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
+            (p.getName(controller), p.getName(controller), statesSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
         overviewText = ('%s|%s|%s|%s|%s|%s|%s\n' % 
         ('Total passes: %d' % totalPasses, 'Total states: %d' % totalStates, '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
 
@@ -2341,7 +2341,7 @@ class Frame:
         # subgraph
         for i in range(0, pass_count):
             p = self.passes[i]
-            markdown.write('subgraph %s\n' % (p.getName()))
+            markdown.write('subgraph %s\n' % (p.getName(controller)))
 
             if True:
                 # set sort
@@ -2349,10 +2349,10 @@ class Frame:
                 state_count = len(states)
                 if state_count == 1:
                     # no siblings
-                    markdown.write('%s\n' % (self.getUniqueStateName(p.getName(), states[0])))
+                    markdown.write('%s\n' % (self.getUniqueStateName(p.getName(controller), states[0])))
                 else:
                     for j in range(0, state_count - 1):
-                        markdown.write('%s --> %s\n' % (self.getUniqueStateName(p.getName(), states[j]), self.getUniqueStateName(p.getName(), states[j+1])))
+                        markdown.write('%s --> %s\n' % (self.getUniqueStateName(p.getName(controller), states[j]), self.getUniqueStateName(p.getName(controller), states[j+1])))
             else:
                 state_count = len(p.states)
                 if state_count == 1:
@@ -2367,7 +2367,7 @@ class Frame:
             if i < pass_count - 1:
                 # connect neighboring passes, only valid in "flowchart"
                 next = self.passes[i+1]
-                markdown.write('%s -.-> %s\n' % (p.getName(), next.getName()))
+                markdown.write('%s -.-> %s\n' % (p.getName(controller), next.getName()))
         markdown.writelines('</div>\n\n')
         
         # linear order
