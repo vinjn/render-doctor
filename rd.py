@@ -1840,8 +1840,8 @@ class State:
     def writeSelfHtml(self, markdown, controller):
         markdown.write(markdeep_head)
         markdown.write('## %s\n' % (self.getUniqueName()))
-        for ev in self.events:
-            ev.writeIndexHtml(markdown, controller)
+        for ev in self.draws:
+            ev.writeSelfHtml(markdown, controller)
 
     def update(self):
         for ev in self.events:
@@ -1870,7 +1870,7 @@ class Event:
         global g_is_binding_fbo
 
         sdfile = controller.GetStructuredFile()
-        chunks = sdfile.chunks        
+        chunks = sdfile.chunks
         self.chunk_id = ev.chunkIndex
         self.event_id = ev.eventId
         self.level = level
@@ -1909,8 +1909,7 @@ class Event:
         pass
 
     def writeIndexHtml(self, markdown, controller):
-        if WRITE_EVENTS:
-            markdown.write("`event_%04d %s`\n\n" % (self.event_id, self.name))
+        pass
 
     def exportResources(self, controller):
         pass
@@ -2037,7 +2036,6 @@ class Draw(Event):
                         if resource_id == rd.ResourceId.Null():
                             continue
 
-
     def getPassSummary(self, controller):
         summary = ''
         color_count = 0
@@ -2077,6 +2075,24 @@ class Draw(Event):
     
     def update(self):
         pass
+
+    def writeSelfHtml(self, markdown, controller):
+        self.writeIndexHtml(markdown, controller)
+        sdfile = controller.GetStructuredFile()
+        chunks = sdfile.chunks
+
+        for ev in self.draw_desc.events:
+            cid = chunks[ev.chunkIndex].metadata.chunkID
+            if API_TYPE == rd.GraphicsAPI.OpenGL:
+                event_type = GLChunk(cid)
+            elif API_TYPE == rd.GraphicsAPI.Vulkan:
+                event_type = VulkanChunk(cid)
+            else:
+                event_type = D3D11Chunk(cid)
+            markdown.write("`event_%04d %s`\n\n" % (ev.eventId, event_type.name))
+
+        markdown.write('\n\n--------\n\n')
+        markdown.write('\n\n--------\n\n')
 
     def writeIndexHtml(self, markdown, controller):
         global g_assets_folder
@@ -2262,7 +2278,7 @@ class Frame:
             calls = 0
             verts = 0
             for s in p.states:
-                statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(controller), s.getUniqueName())
+                statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(controller).lower(), s.getUniqueName().lower())
                 drawsSummary += '%d<br>' % (len(s.draws))
 
                 c = 0
@@ -2314,7 +2330,7 @@ class Frame:
                 c_info += self.getImageLinkOrNothing(c)
                     
             overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s\n' % 
-            (p.getName(controller), p.getName(controller), statesSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
+            (p.getName(controller), p.getName(controller).lower(), statesSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
         overviewText = ('%s|%s|%s|%s|%s|%s|%s\n' % 
         ('Total passes: %d' % totalPasses, 'Total states: %d' % totalStates, '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
 
@@ -2489,7 +2505,7 @@ class Frame:
         markdown.write("  * API: %s\n" % pipelineTypes[api_prop.pipelineType])
         # markdown.write("  * Replay API: %s\n" % pipelineTypes[api_prop.localRenderer])
         markdown.write("  * GPU: %s\n" % GPUVendors[api_prop.vendor])
-        
+
         markdown.close()
 
         if DUMP_PSO_DAG:
