@@ -1778,24 +1778,25 @@ class Pass:
     name = None
     s_id = 1
 
-uid_counters = {}
+uniqueStateCounters = {}
 
 class State:
     def __init__(self, draw):
         self.events = []
         self.draws = []
         self.name = 'default'
+        self.unique_name = self.name
         State.s_id += 1            
 
         if draw:
             self.name = draw.pso_key
 
-        if self.name in uid_counters:
-            uid_counters[self.name] += 1
-            self.unique_name = '%s_%d' % (self.name, uid_counters[self.name])
-        else:
-            uid_counters[self.name] = 0
-            self.unique_name = self.name
+            if self.name in uniqueStateCounters:
+                uniqueStateCounters[self.name] += 1
+                self.unique_name = '%s_%d' % (self.name, uniqueStateCounters[self.name])
+            else:
+                uniqueStateCounters[self.name] = 0
+                self.unique_name = self.name
 
     def getFirstDraw(self):
         if len(self.draws) == 0:
@@ -2332,7 +2333,7 @@ class Frame:
             overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s\n' % 
             (p.getName(controller), p.getName(controller).lower(), statesSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
         overviewText = ('%s|%s|%s|%s|%s|%s|%s\n' % 
-        ('Total passes: %d' % totalPasses, 'Total states: %d' % totalStates, '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
+        ('Total passes: %d' % totalPasses, 'Total states: %d<br>Unique states: %d' % (totalStates, len(uniqueStateCounters)), '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
 
         markdown.write(overviewText)
 
