@@ -36,13 +36,13 @@ import renderdoc as rd
 #######################################
 ### Config Begin
 #######################################
-DUMP_DETALS = False
-DUMP_PIPELINE = True
-DUMP_RENDER_TARGET = True
-DUMP_TEXTURE = True
-DUMP_DEPTH_BUFFER = True # TODO: figure out a way to visualize depth, disable for now
-DUMP_FAKE_PASSES = False # disabled since I dont like how rdc forms passes
-DUMP_PSO_DAG = False
+WRITE_DETALS = False
+WRITE_PIPELINE = True
+WRITE_RENDER_TARGET = True
+WRITE_TEXTURE = True
+WRITE_DEPTH_BUFFER = True
+WRITE_FAKE_PASSES = False # disabled since I dont like how rdc forms passes
+WRITE_PSO_DAG = False
 #######################################
 ### Config End
 ########################################
@@ -1677,6 +1677,7 @@ class VulkanChunk(Enum):
 pp = pprint.PrettyPrinter(indent=4)
 
 g_is_binding_fbo = True # using this variable to separate passes
+g_markers = []
 
 # raw data
 g_events = []
@@ -1831,8 +1832,7 @@ class State:
         draw_count = len(self.draws)
         if draw_count == 0:
             return
-        if draw_count > 1:
-            markdown.write('### draws: %d\n' % draw_count)
+
         if draw_count == 1:
             self.draws[0].writeIndexHtml(markdown, controller)
         elif draw_count == 2:
@@ -1850,10 +1850,6 @@ class State:
         markdown.write('## %s\n' % (self.getUniqueName()))
         for ev in self.draws:
             ev.writeDetailHtml(markdown, controller)
-
-    def update(self):
-        for ev in self.events:
-            ev.update()
 
     def exportResources(self, controller):
         for ev in self.events:
@@ -1913,9 +1909,6 @@ class Event:
                 g_is_binding_fbo = False
         # markdown.write("`event_%04d %s`\n\n" % (eid, chunkID.name))
 
-    def update(self):
-        pass
-
     def writeIndexHtml(self, markdown, controller):
         pass
 
@@ -1942,10 +1935,12 @@ class Draw(Event):
         self.textures = []
         self.color_buffers = []
         self.depth_buffer = None
+        self.expanded_marker = get_expanded_marker_name()
+        self.marker = get_marker_name()
 
         global g_assets_folder
 
-        if DUMP_PIPELINE:
+        if WRITE_PIPELINE:
             self.collectPipeline(controller)
 
         for output in draw.outputs:
@@ -2081,9 +2076,6 @@ class Draw(Event):
         markdown.write('![%s `%s`](%s class="lazyload" data-src="%s" border="2")' % (caption_suffix, res_info_text, "../src/logo.png", texture_file_name))
         # markdown.write('![%s `%s`](%s class="lazyload" loading="lazy" border="2")' % (caption_suffix, res_info_text, texture_file_name))
     
-    def update(self):
-        pass
-
     def writeDetailHtml(self, markdown, controller):
         self.writeIndexHtml(markdown, controller)
         sdfile = controller.GetStructuredFile()
@@ -2106,9 +2098,12 @@ class Draw(Event):
         global g_assets_folder
 
         markdown.write('### [D]%04d %s\n\n' % (self.draw_id, self.name.replace('#', '__')))
-        
+
+        if self.expanded_marker:
+            markdown.write('%s\n\n' % self.expanded_marker)
+    
         # color buffer section
-        if DUMP_RENDER_TARGET:
+        if WRITE_RENDER_TARGET:
             for idx, resource_id in enumerate(self.color_buffers):
                 if not resource_id or resource_id == rd.ResourceId.Null():
                     continue
@@ -2118,7 +2113,7 @@ class Draw(Event):
                 self.writeTextureMarkdown(markdown, controller, 'c%s: %s' % (idx, resource_name), resource_id, file_name)
         
         # depth buffer section
-        if DUMP_DEPTH_BUFFER:
+        if WRITE_DEPTH_BUFFER:
             if self.depth_buffer != rd.ResourceId.Null():
                 resource_id = self.depth_buffer
                 resource_name = get_resource_name(controller, resource_id)
@@ -2128,7 +2123,7 @@ class Draw(Event):
 
         # texture section
         markdown.write('\n\n--------\n\n')
-        if DUMP_TEXTURE:
+        if WRITE_TEXTURE:
             for idx, resource_id in enumerate(self.textures):
                 if not resource_id or resource_id == rd.ResourceId.Null():
                     continue
@@ -2203,13 +2198,13 @@ class Draw(Event):
             cv2.imwrite(file_name, equ)
 
     def exportResources(self, controller):
-        if not DUMP_RENDER_TARGET and not DUMP_DEPTH_BUFFER and not DUMP_TEXTURE:
+        if not WRITE_RENDER_TARGET and not WRITE_DEPTH_BUFFER and not WRITE_TEXTURE:
             return
 
         controller.SetFrameEvent(self.event_id, False)
 
-        # dump textures
-        if DUMP_TEXTURE:
+        # WRITE textures
+        if WRITE_TEXTURE:
             for idx, resource_id in enumerate(self.textures):
                 if resource_id == rd.ResourceId.Null():
                     continue
@@ -2217,17 +2212,17 @@ class Draw(Event):
                 file_name = get_resource_filename(resource_name, IMG_EXT)
                 self.exportTexture(controller, resource_id, file_name)
                 
-        # dump render targtes (aka outputs)
-        if DUMP_RENDER_TARGET:
+        # WRITE render targtes (aka outputs)
+        if WRITE_RENDER_TARGET:
             for idx, resource_id in enumerate(self.color_buffers):
                 if resource_id != rd.ResourceId.Null():
                     resource_name = get_resource_name(controller, resource_id)
                     file_name = get_resource_filename('%s__%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
-                    if DUMP_RENDER_TARGET:
+                    if WRITE_RENDER_TARGET:
                         self.exportTexture(controller, resource_id, file_name)
 
         # depth
-        if DUMP_DEPTH_BUFFER and self.depth_buffer:
+        if WRITE_DEPTH_BUFFER and self.depth_buffer:
             resource_id = self.depth_buffer
             if resource_id != rd.ResourceId.Null():
                 resource_name = get_resource_name(controller, resource_id)
@@ -2269,8 +2264,8 @@ class Frame:
     def writeFrameOverview(self, markdown, controller):
         markdown.write('# Frame Overview\n')
 
-        markdown.write('pass|states|draws|verts|calls|z|c\n')
-        markdown.write('----|------|-----|-----|-----|-|-\n')
+        markdown.write('pass|state|marker|draws|verts|calls|z|c\n')
+        markdown.write('----|------|-------|-----|-----|-----|-|-\n')
         overviewText = ''
 
         totalPasses = 0
@@ -2279,7 +2274,13 @@ class Frame:
         totalCalls = 0
         totalVerts = 0
         for p in self.passes:
+
+            lastDraw = p.getLastDraw()
+            if not lastDraw:
+                continue
+
             statesSummary = ''
+            markersSummary = ''
             drawsSummary = ''
             callsSummary = ''
             vertsSummary = ''
@@ -2289,6 +2290,7 @@ class Frame:
             verts = 0
             for s in p.states:
                 statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(controller).lower(), s.getUniqueName().lower())
+                markersSummary += '%s<br>' % (s.draws[-1].marker)
                 drawsSummary += '%d<br>' % (len(s.draws))
 
                 c = 0
@@ -2305,13 +2307,11 @@ class Frame:
                 states += 1
 
             if states > 1:
-                statesSummary = '~%d<br>' % states  + statesSummary
-                drawsSummary = '~%d<br>' % draws + drawsSummary
-                callsSummary = '~%d<br>' % calls + callsSummary
-                vertsSummary = '~%d<br>' % verts + vertsSummary
-            lastDraw = p.getLastDraw()
-            if not lastDraw:
-                continue
+                statesSummary += '~%d<br>' % states
+                drawsSummary += '~%d<br>' % draws
+                callsSummary += '~%d<br>' % calls
+                vertsSummary += '~%d<br>' % verts
+                markersSummary += '<br>'
 
             # total stats
             totalPasses += 1
@@ -2329,7 +2329,7 @@ class Frame:
                 c_filenames[idx] = get_resource_filename('%s__%04d_c%d' % (resource_name, lastDraw.draw_id, idx), IMG_EXT)
             
             # depth buffer section
-            if DUMP_DEPTH_BUFFER:
+            if WRITE_DEPTH_BUFFER:
                 if lastDraw.depth_buffer != rd.ResourceId.Null():
                     resource_id = lastDraw.depth_buffer
                     resource_name = get_resource_name(controller, resource_id)
@@ -2339,9 +2339,9 @@ class Frame:
             for c in c_filenames:
                 c_info += self.getImageLinkOrNothing(c)
                     
-            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s\n' % 
-            (p.getName(controller), p.getName(controller).lower(), statesSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
-        overviewText = ('%s|%s|%s|%s|%s|%s|%s\n' % 
+            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s\n' % 
+            (p.getName(controller), p.getName(controller).lower(), statesSummary, markersSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
+        overviewText = ('%s|%s|''|%s|%s|%s|%s|%s\n' % 
         ('Total passes: %d' % totalPasses, 'Total: %d<br>Unique: %d' % (totalStates, len(uniqueStateCounters)), '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
 
         markdown.write(overviewText)
@@ -2509,7 +2509,7 @@ class Frame:
         markdown.write('\n--------\n')
         
         markdown.write("**Summary**\n\n")
-        if DUMP_PSO_DAG:
+        if WRITE_PSO_DAG:
             markdown.write("  * Experimental feature [pipeline dag](dag.html)\n")
         markdown.write("  * RDC: %s\n" % rdc_file)
         markdown.write("  * API: %s\n" % pipelineTypes[api_prop.pipelineType])
@@ -2518,7 +2518,7 @@ class Frame:
 
         markdown.close()
 
-        if DUMP_PSO_DAG:
+        if WRITE_PSO_DAG:
             self.writeDAG()
 
     def exportResources(self, controller):
@@ -2593,13 +2593,24 @@ def setup_rdc(filename, adb_mode = None):
 
     return cap, controller
 
+def get_expanded_marker_name():
+    sep = ' / '
+    return sep.join(g_markers)
+
+def get_marker_name():
+    if len(g_markers) > 0:
+        return g_markers[-1]
+    return ''
+
 # Define a recursive function for iterating over draws
 def visit_draw(controller, draw, level = 1):
     # hack level
+    global g_markers
     level = 1
     if draw.name == 'API Calls':
         pass
     
+    needsPopMarker = False
     # print(rd.GLChunk.glPopGroupMarkerEXT)
     if draw.events:
         # api before this draw & including this draw
@@ -2612,12 +2623,15 @@ def visit_draw(controller, draw, level = 1):
             State.current.addDraw(new_draw)
     else:
         # regime call, skip for now
-        pass
-    
+        g_markers.append(draw.name)
+        needsPopMarker = True
+
     # Iterate over the draw's children
     for draw in draw.children:
-        if not visit_draw(controller, draw, level + 1):
-            return False
+        visit_draw(controller, draw, level + 1)
+
+    if needsPopMarker:
+        g_markers.pop()
 
     return True
 
@@ -2645,7 +2659,7 @@ def get_resource_name(controller, resource_id):
 
     return "Res_" + int(resource_id)
 
-def dump_FAKE_passes(controller, draw): # disabled since I dont like how rdc forms passes
+def WRITE_FAKE_passes(controller, draw): # disabled since I dont like how rdc forms passes
     # Counter for which pass we're in
     passnum = 0
     # Counter for how many draws are in the pass
@@ -2716,8 +2730,8 @@ def raw_data_generation(controller):
     while len(draw.children) > 0:
         draw = draw.children[0]
 
-    if DUMP_FAKE_PASSES: # disabled since I dont like how rdc forms passes
-        dump_FAKE_passes(controller, draw) # disabled since I dont like how rdc forms passes
+    if WRITE_FAKE_PASSES: # disabled since I dont like how rdc forms passes
+        WRITE_FAKE_passes(controller, draw) # disabled since I dont like how rdc forms passes
 
     # Iterate over all of the root drawcalls
     for d in draws:
