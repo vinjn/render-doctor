@@ -33,15 +33,22 @@ os.environ["PATH"] += os.pathsep + os.path.abspath('../renderdoc/x64/Development
 
 import renderdoc as rd
 
-API_TYPE = None # GraphicsAPI
-IMG_EXT = 'png'
-WRITE_EVENTS = True
+#######################################
+### Config Begin
+#######################################
+DUMP_DETALS = False
 DUMP_PIPELINE = True
 DUMP_RENDER_TARGET = True
 DUMP_TEXTURE = True
 DUMP_DEPTH_BUFFER = True # TODO: figure out a way to visualize depth, disable for now
 DUMP_FAKE_PASSES = False # disabled since I dont like how rdc forms passes
 DUMP_PSO_DAG = False
+#######################################
+### Config End
+########################################
+
+API_TYPE = None # GraphicsAPI
+IMG_EXT = 'png'
 
 class ShaderStage(Enum):
     VS = 0
@@ -1764,12 +1771,12 @@ class Pass:
         for s in self.states:
             s.exportResources(controller)
 
-    def writeSelfHtml(self, controller):
+    def writeDetailHtml(self, controller):
         for s in self.states:
             filename = g_assets_folder / (s.getUniqueName() + '.html')
             if not Path(filename).exists():
                 with open(filename,"w") as self_html:
-                    s.writeSelfHtml(self_html, controller)
+                    s.writeDetailHtml(self_html, controller)
                     print(filename)
 
     states = None
@@ -1838,11 +1845,11 @@ class State:
 
         markdown.write('\n')
 
-    def writeSelfHtml(self, markdown, controller):
+    def writeDetailHtml(self, markdown, controller):
         markdown.write(markdeep_head)
         markdown.write('## %s\n' % (self.getUniqueName()))
         for ev in self.draws:
-            ev.writeSelfHtml(markdown, controller)
+            ev.writeDetailHtml(markdown, controller)
 
     def update(self):
         for ev in self.events:
@@ -2077,7 +2084,7 @@ class Draw(Event):
     def update(self):
         pass
 
-    def writeSelfHtml(self, markdown, controller):
+    def writeDetailHtml(self, markdown, controller):
         self.writeIndexHtml(markdown, controller)
         sdfile = controller.GetStructuredFile()
         chunks = sdfile.chunks
@@ -2101,13 +2108,14 @@ class Draw(Event):
         markdown.write('### [D]%04d %s\n\n' % (self.draw_id, self.name.replace('#', '__')))
         
         # color buffer section
-        for idx, resource_id in enumerate(self.color_buffers):
-            if not resource_id or resource_id == rd.ResourceId.Null():
-                continue
-            resource_name = get_resource_name(controller, resource_id)
-            # TODO: ugly
-            file_name = get_resource_filename('%s__%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
-            self.writeTextureMarkdown(markdown, controller, 'c%s: %s' % (idx, resource_name), resource_id, file_name)
+        if DUMP_RENDER_TARGET:
+            for idx, resource_id in enumerate(self.color_buffers):
+                if not resource_id or resource_id == rd.ResourceId.Null():
+                    continue
+                resource_name = get_resource_name(controller, resource_id)
+                # TODO: ugly
+                file_name = get_resource_filename('%s__%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
+                self.writeTextureMarkdown(markdown, controller, 'c%s: %s' % (idx, resource_name), resource_id, file_name)
         
         # depth buffer section
         if DUMP_DEPTH_BUFFER:
@@ -2120,15 +2128,16 @@ class Draw(Event):
 
         # texture section
         markdown.write('\n\n--------\n\n')
-        for idx, resource_id in enumerate(self.textures):
-            if not resource_id or resource_id == rd.ResourceId.Null():
-                continue
-            # if idx > 7: # magic
-                # TODO: uglllllly
-                # break
-            resource_name = get_resource_name(controller, resource_id)
-            file_name = get_resource_filename(resource_name, IMG_EXT)
-            self.writeTextureMarkdown(markdown, controller, 't%s: %s' % (idx, resource_name), resource_id, file_name)
+        if DUMP_TEXTURE:
+            for idx, resource_id in enumerate(self.textures):
+                if not resource_id or resource_id == rd.ResourceId.Null():
+                    continue
+                # if idx > 7: # magic
+                    # TODO: uglllllly
+                    # break
+                resource_name = get_resource_name(controller, resource_id)
+                file_name = get_resource_filename(resource_name, IMG_EXT)
+                self.writeTextureMarkdown(markdown, controller, 't%s: %s' % (idx, resource_name), resource_id, file_name)
         
         # TODO: add UAV / image etc
 
@@ -2333,7 +2342,7 @@ class Frame:
             overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s\n' % 
             (p.getName(controller), p.getName(controller).lower(), statesSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
         overviewText = ('%s|%s|%s|%s|%s|%s|%s\n' % 
-        ('Total passes: %d' % totalPasses, 'Total states: %d<br>Unique states: %d' % (totalStates, len(uniqueStateCounters)), '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
+        ('Total passes: %d' % totalPasses, 'Total: %d<br>Unique: %d' % (totalStates, len(uniqueStateCounters)), '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
 
         markdown.write(overviewText)
 
@@ -2728,7 +2737,7 @@ def viz_generation(controller):
     g_frame.writeIndexHtml(index_html, controller)
 
     for p in g_frame.passes:
-        p.writeSelfHtml(controller)
+        p.writeDetailHtml(controller)
   
     g_frame.exportResources(controller)
     print('$viz_generation')
