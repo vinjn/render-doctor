@@ -1681,6 +1681,7 @@ pp = pprint.PrettyPrinter(indent=4)
 
 g_is_binding_fbo = True # using this variable to separate passes
 g_markers = []
+g_draw_durations = {}
 
 # raw data
 g_events = []
@@ -1960,6 +1961,9 @@ class Draw(Event):
         self.depth_buffer = None
         self.expanded_marker = get_expanded_marker_name()
         self.marker = get_marker_name()
+        self.gpu_duration = 0
+        if self.event_id in g_draw_durations:
+            self.gpu_duration = g_draw_durations[self.event_id]
 
         global g_assets_folder
 
@@ -2293,11 +2297,12 @@ class Frame:
     def writeFrameOverview(self, markdown, controller):
         markdown.write('# Frame Overview\n')
 
-        markdown.write('pass|state|marker|draws|verts|calls|z|c\n')
-        markdown.write('----|------|-------|-----|-----|-----|-|-\n')
+        markdown.write('pass|state|(ms)|marker|draws|verts|calls|z|c\n')
+        markdown.write('----|-----|----|------|-----|-----|-----|-|-\n')
         overviewText = ''
 
         totalPasses = 0
+        totalTime = 0
         totalStates = 0
         totalDraws = 0
         totalCalls = 0
@@ -2309,10 +2314,12 @@ class Frame:
                 continue
 
             statesSummary = ''
+            timeSummary = ''
             markersSummary = ''
             drawsSummary = ''
             callsSummary = ''
             vertsSummary = ''
+            time = 0
             draws = 0
             states = 0
             calls = 0
@@ -2324,13 +2331,18 @@ class Frame:
 
                 c = 0
                 v = 0
+                m = 0
                 draws += len(s.draws)
                 for d in s.draws:
                     c += len(d.draw_desc.events)
                     v += d.draw_desc.numIndices
+                    m += d.gpu_duration * 1e3
 
                 callsSummary += '%d<br>' % c
                 vertsSummary += '%d<br>' % v
+                timeSummary += '%.2f<br>' % m
+
+                time += m
                 calls += c
                 verts += v
                 states += 1
@@ -2341,9 +2353,11 @@ class Frame:
                 callsSummary += '~%d<br>' % calls
                 vertsSummary += '~%d<br>' % verts
                 markersSummary += '<br>'
+                timeSummary += '~%.2f<br>' % time
 
             # total stats
             totalPasses += 1
+            totalTime += time
             totalStates += states
             totalDraws += draws
             totalCalls += calls
@@ -2368,10 +2382,10 @@ class Frame:
             for c in c_filenames:
                 c_info += self.getImageLinkOrNothing(c)
                     
-            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s\n' % 
-            (p.getName(controller), p.getName(controller).lower(), statesSummary, markersSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
-        overviewText = ('%s|%s|''|%s|%s|%s|%s|%s\n' % 
-        ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, len(uniqueStateCounters)), '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
+            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
+            (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, markersSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
+        overviewText = ('%s|%s|%s|''|%s|%s|%s|%s|%s\n' % 
+        ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, len(uniqueStateCounters)), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
 
         markdown.write(overviewText)
 
@@ -2858,6 +2872,22 @@ def sampleCode(controller):
         printVar(v)
 
 
+def fetch_gpu_counters(controller):
+    global g_draw_durations
+    counter_type = rd.GPUCounter.EventGPUDuration
+    results = controller.FetchCounters([counter_type])
+    counter_desc = controller.DescribeCounter(counter_type)
+
+    for r in results:
+        id = r.eventId
+
+        if counter_desc.resultByteWidth == 4:
+            val = r.value.f
+        else:
+            val = r.value.d
+
+        g_draw_durations[id] = val
+
 def rdc_main(controller):
     global g_assets_folder
     global report_name
@@ -2869,6 +2899,7 @@ def rdc_main(controller):
         # WAR: make angels report viewable
         WRITE_TEXTURE = False
 
+    fetch_gpu_counters(controller)
     raw_data_generation(controller)
     derived_data_generation(controller)
 
