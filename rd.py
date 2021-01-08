@@ -1694,6 +1694,12 @@ markdeep_head = """
 <script src="../src/lazysizes.js" charset="utf-8"></script>\n
 """
 
+markdeep_lite_head = """
+<meta charset="utf-8" emacsmode="-*- markdown -*-">
+<link rel="stylesheet" href="../src/company-api.css">
+<script src="../src/markdeep.min.js" charset="utf-8"></script>
+"""
+
 mermaid_head = """
 <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>\n
 """
@@ -2038,13 +2044,17 @@ class Draw(Event):
                     mapping = shader.bindpointMapping # struct ShaderBindpointMapping
                     for sampler in mapping.samplers:
                         print(sampler.name)
-                file_name = get_resource_filename(g_assets_folder / shader_name)
+                file_name = get_resource_filename(g_assets_folder / shader_name, 'html')
 
                 if not Path(file_name).exists():
                     with open(file_name, 'w') as fp:
                         print("Writing %s" % file_name)
+                        fp.write(markdeep_lite_head)
+                        fp.write('```glsl\n')
                         fp.write('// %s\n' % self.expanded_marker)
                         fp.write(str(refl.rawBytes, 'utf-8'))
+                        fp.write('\n```\n')
+                        fp.write("\n\n")
 
                 # C:\svn_pool\renderdoc\renderdoc\api\replay\gl_pipestate.h
                 # struct State
@@ -2158,7 +2168,8 @@ class Draw(Event):
         markdown.write('\n\n')
         for stage in range(0, rd.ShaderStage.Count):
             if self.shader_names[stage] != None:
-                markdown.write("- %s: %s\n" % (ShaderStage(stage).name, linkable_get_resource_filename(self.shader_names[stage])))
+                # TODO: refactor
+                markdown.write("- %s: %s\n" % (ShaderStage(stage).name, linkable_get_resource_filename(self.shader_names[stage], 'html')))
 
         # cb / constant buffer section
         resource_name = 'const_buffer--%04d' % (self.draw_id)
@@ -2307,8 +2318,8 @@ class Frame:
             calls = 0
             verts = 0
             for s in p.states:
-                statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(controller).lower(), s.getUniqueName().lower())
-                markersSummary += '%s<br>' % (s.draws[-1].marker)
+                statesSummary += '%d:[%s](#%s/%s)<br>' % (states+1, s.getName(), p.getName(controller).lower(), s.getUniqueName().lower())
+                markersSummary += '%d:%s<br>' % (states+1, s.draws[-1].marker)
                 drawsSummary += '%d<br>' % (len(s.draws))
 
                 c = 0
@@ -2325,7 +2336,7 @@ class Frame:
                 states += 1
 
             if states > 1:
-                statesSummary += '~%d<br>' % states
+                statesSummary += '<br>'
                 drawsSummary += '~%d<br>' % draws
                 callsSummary += '~%d<br>' % calls
                 vertsSummary += '~%d<br>' % verts
