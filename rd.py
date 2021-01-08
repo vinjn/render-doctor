@@ -50,6 +50,9 @@ WRITE_PSO_DAG = False
 API_TYPE = None # GraphicsAPI
 IMG_EXT = 'png'
 
+def getSafeName(name):
+    return name.replace('/', '_').replace('#', '_').replace(' ', '_').replace('(', '_').replace(')', '_').replace('.', '_').replace(':', '_').replace('|', '_')
+
 class ShaderStage(Enum):
     VS = 0
     HS = auto()
@@ -1848,12 +1851,26 @@ class State:
     def writeDetailHtml(self, markdown, controller):
         markdown.write(markdeep_head)
         markdown.write('## %s\n' % (self.getUniqueName()))
-        for ev in self.draws:
-            ev.writeDetailHtml(markdown, controller)
+        for d in self.draws:
+            d.writeDetailHtml(markdown, controller)
 
     def exportResources(self, controller):
-        for ev in self.events:
-            ev.exportResources(controller)
+        if WRITE_DETALS:
+            for d in self.draws:
+                d.exportResources(controller)
+        else:
+            draw_count = len(self.draws)
+            if draw_count == 0:
+                return
+            if draw_count == 1:
+                self.draws[0].exportResources(controller)
+            elif draw_count == 2:
+                self.draws[0].exportResources(controller)
+                self.draws[1].exportResources(controller)
+            else:
+                self.draws[0].exportResources(controller)
+                self.draws[int(draw_count/2)].exportResources(controller)
+                self.draws[-1].exportResources(controller)
 
     def addEvent(self, ev):
         self.events.append(ev)
@@ -2002,10 +2019,10 @@ class Draw(Event):
             if refl:
                 if hasattr(shader, 'programResourceId'):
                     program_name = get_resource_name(controller, shader.programResourceId)
-                    shader_name = program_name + '__' + get_resource_name(controller, shader.shaderResourceId)
+                    shader_name = program_name + '--' + get_resource_name(controller, shader.shaderResourceId)
                 else:
                     program_name = get_resource_name(controller, shader.resourceId)
-                    shader_name = program_name + '__' + ShaderStage(stage).name
+                    shader_name = program_name + '--' + ShaderStage(stage).name
                 self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage)
                 self.shader_names[stage] = shader_name
                 if not self.pso_key:
@@ -2024,9 +2041,10 @@ class Draw(Event):
                 file_name = get_resource_filename(g_assets_folder / shader_name)
 
                 if not Path(file_name).exists():
-                    with open(file_name, 'wb') as fp:
+                    with open(file_name, 'w') as fp:
                         print("Writing %s" % file_name)
-                        fp.write(refl.rawBytes)
+                        fp.write('// %s\n' % self.expanded_marker)
+                        fp.write(str(refl.rawBytes, 'utf-8'))
 
                 # C:\svn_pool\renderdoc\renderdoc\api\replay\gl_pipestate.h
                 # struct State
@@ -2109,7 +2127,7 @@ class Draw(Event):
                     continue
                 resource_name = get_resource_name(controller, resource_id)
                 # TODO: ugly
-                file_name = get_resource_filename('%s__%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
+                file_name = get_resource_filename('%s--%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
                 self.writeTextureMarkdown(markdown, controller, 'c%s: %s' % (idx, resource_name), resource_id, file_name)
         
         # depth buffer section
@@ -2118,7 +2136,7 @@ class Draw(Event):
                 resource_id = self.depth_buffer
                 resource_name = get_resource_name(controller, resource_id)
                 # TODO: ugly again
-                file_name = get_resource_filename('%s__%04d_z' % (resource_name, self.draw_id), IMG_EXT)
+                file_name = get_resource_filename('%s--%04d_z' % (resource_name, self.draw_id), IMG_EXT)
                 self.writeTextureMarkdown(markdown, controller, 'z: %s' % (resource_name), resource_id, file_name)
 
         # texture section
@@ -2143,7 +2161,7 @@ class Draw(Event):
                 markdown.write("- %s: %s\n" % (ShaderStage(stage).name, linkable_get_resource_filename(self.shader_names[stage])))
 
         # cb / constant buffer section
-        resource_name = 'd%04d__cb_contents' % (self.draw_id)
+        resource_name = 'const_buffer--%04d' % (self.draw_id)
         file_name = get_resource_filename(resource_name, 'html')
         with open(g_assets_folder / file_name, 'w') as cb_contents_fp:
             cb_contents_fp.write(markdeep_head)
@@ -2217,7 +2235,7 @@ class Draw(Event):
             for idx, resource_id in enumerate(self.color_buffers):
                 if resource_id != rd.ResourceId.Null():
                     resource_name = get_resource_name(controller, resource_id)
-                    file_name = get_resource_filename('%s__%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
+                    file_name = get_resource_filename('%s--%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
                     if WRITE_RENDER_TARGET:
                         self.exportTexture(controller, resource_id, file_name)
 
@@ -2226,7 +2244,7 @@ class Draw(Event):
             resource_id = self.depth_buffer
             if resource_id != rd.ResourceId.Null():
                 resource_name = get_resource_name(controller, resource_id)
-                file_name = get_resource_filename('%s__%04d_z' % (resource_name, self.draw_id), IMG_EXT)
+                file_name = get_resource_filename('%s--%04d_z' % (resource_name, self.draw_id), IMG_EXT)
                 if not Path(file_name).exists():
                     self.exportTexture(controller, resource_id, file_name)
 
@@ -2326,14 +2344,14 @@ class Frame:
                 if not resource_id or resource_id == rd.ResourceId.Null():
                     continue
                 resource_name = get_resource_name(controller, resource_id)
-                c_filenames[idx] = get_resource_filename('%s__%04d_c%d' % (resource_name, lastDraw.draw_id, idx), IMG_EXT)
+                c_filenames[idx] = get_resource_filename('%s--%04d_c%d' % (resource_name, lastDraw.draw_id, idx), IMG_EXT)
             
             # depth buffer section
             if WRITE_DEPTH_BUFFER:
                 if lastDraw.depth_buffer != rd.ResourceId.Null():
                     resource_id = lastDraw.depth_buffer
                     resource_name = get_resource_name(controller, resource_id)
-                    z_filename = get_resource_filename('%s__%04d_z' % (resource_name, lastDraw.draw_id), IMG_EXT)
+                    z_filename = get_resource_filename('%s--%04d_z' % (resource_name, lastDraw.draw_id), IMG_EXT)
 
             c_info = ''
             for c in c_filenames:
@@ -2342,7 +2360,7 @@ class Frame:
             overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s\n' % 
             (p.getName(controller), p.getName(controller).lower(), statesSummary, markersSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
         overviewText = ('%s|%s|''|%s|%s|%s|%s|%s\n' % 
-        ('Total passes: %d' % totalPasses, 'Total: %d<br>Unique: %d' % (totalStates, len(uniqueStateCounters)), '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
+        ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, len(uniqueStateCounters)), '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
 
         markdown.write(overviewText)
 
@@ -2623,7 +2641,10 @@ def visit_draw(controller, draw, level = 1):
             State.current.addDraw(new_draw)
     else:
         # regime call, skip for now
-        g_markers.append(draw.name)
+        items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').split()
+        items = items[0:2]
+        name = ' '.join(items)
+        g_markers.append(name)
         needsPopMarker = True
 
     # Iterate over the draw's children
@@ -2653,9 +2674,7 @@ def get_resource_name(controller, resource_id):
     resources = controller.GetResources()
     for res in resources:
         if resource_id == res.resourceId:
-            name = res.name
-            name = name.replace('/', '_').replace('#', '_').replace(' ', '_').replace('(', '_').replace(')', '_').replace('.', '_').replace(':', '_')
-            return name
+            return getSafeName(res.name)
 
     return "Res_" + int(resource_id)
 
@@ -2832,8 +2851,12 @@ def rdc_main(controller):
     global g_assets_folder
     global report_name
     global index_html
+    global WRITE_TEXTURE
 
     report_name = g_assets_folder / 'index.html'
+    if 'angels' in g_assets_folder.stem:
+        # WAR: make angels report viewable
+        WRITE_TEXTURE = False
 
     raw_data_generation(controller)
     derived_data_generation(controller)
