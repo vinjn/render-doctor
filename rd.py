@@ -1982,6 +1982,9 @@ class Draw(Event):
 
         # pso
         pso = None
+        state = controller.GetPipelineState()
+        pipe = state.GetGraphicsPipelineObject()
+
         if API_TYPE == rd.GraphicsAPI.OpenGL:
             pso = controller.GetGLPipelineState()
             # C:\svn_pool\renderdoc\renderdoc\api\replay\gl_pipestate.h
@@ -2048,6 +2051,25 @@ class Draw(Event):
                     mapping = shader.bindpointMapping # struct ShaderBindpointMapping
                     for sampler in mapping.samplers:
                         print(sampler.name)
+
+                # raw txt
+                file_name = get_resource_filename(g_assets_folder / shader_name, 'txt')
+
+                if not Path(file_name).exists():
+                    with open(file_name, 'wb') as fp:
+                        print("Writing %s" % file_name)
+                        fp.write(refl.rawBytes)
+
+                # html
+                highlevel_shader = ''
+                if API_TYPE == rd.GraphicsAPI.OpenGL:
+                    highlevel_shader = str(refl.rawBytes, 'utf-8')
+                else:
+                    targets = controller.GetDisassemblyTargets(True)
+                    for t in targets:
+                        highlevel_shader = controller.DisassembleShader(pipe, refl, t)
+                        break
+
                 file_name = get_resource_filename(g_assets_folder / shader_name, 'html')
 
                 if not Path(file_name).exists():
@@ -2056,7 +2078,7 @@ class Draw(Event):
                         fp.write(markdeep_lite_head)
                         fp.write('```glsl\n')
                         fp.write('// %s\n' % self.expanded_marker)
-                        fp.write(str(refl.rawBytes, 'utf-8'))
+                        fp.write(highlevel_shader)
                         fp.write('\n```\n')
                         fp.write("\n\n")
 
