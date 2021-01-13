@@ -1995,13 +1995,13 @@ class Draw(Event):
         elif API_TYPE == rd.GraphicsAPI.Vulkan:
             pso = controller.GetVulkanPipelineState()
 
+        program_name = ""
         for stage in range(0, rd.ShaderStage.Count):
             # C:\svn_pool\renderdoc\renderdoc\api\replay\shader_types.h
             # struct ShaderReflection
             # TODO: refactor
             shader = None
             shader_name = None
-            program_name = ""
             refl = None
 
             if stage == 0:
@@ -2032,19 +2032,15 @@ class Draw(Event):
             if refl:
                 if hasattr(shader, 'programResourceId'):
                     program_name = get_resource_name(controller, shader.programResourceId)
-                    shader_name = program_name + '--' + get_resource_name(controller, shader.shaderResourceId)
+                    shader_name = program_name + '__' + get_resource_name(controller, shader.shaderResourceId)
                 else:
-                    program_name = get_resource_name(controller, shader.resourceId)
-                    shader_name = program_name + '--' + ShaderStage(stage).name
+                    shader_name = get_resource_name(controller, shader.resourceId)
+                    shader_name = shader_name.replace('Vertex_Shader', 'vs').replace('Pixel_Shader', 'ps').replace('Compute_Shader', 'cs')
+                    if  program_name:
+                        program_name += '__'
+                    program_name += shader_name
                 self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage)
                 self.shader_names[stage] = shader_name
-                if not self.pso_key:
-                    self.pso_key = program_name
-
-                if self.pso_key != State.current.getName():
-                    # detects a PSO change
-                    # TODO: this is too ugly
-                    Pass.current.addState(self)
 
                 if False:
                     # TODO: sadly ShaderBindpointMapping is always empty :(
@@ -2092,6 +2088,12 @@ class Draw(Event):
                         self.textures.append(resource_id)
                         if resource_id == rd.ResourceId.Null():
                             continue
+        self.pso_key = program_name
+
+        if self.pso_key != State.current.getName():
+            # detects a PSO change
+            # TODO: this is too ugly
+            Pass.current.addState(self)        
 
     def getPassSummary(self, controller):
         summary = ''
