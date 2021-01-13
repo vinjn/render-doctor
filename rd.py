@@ -2004,27 +2004,30 @@ class Draw(Event):
             shader_name = None
             refl = None
 
-            if stage == 0:
-                shader = pso.vertexShader
-            elif stage == 1:
-                if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
-                    shader = pso.tessControlShader
-                else:
-                    shader = pso.hullShader
-            elif stage == 2:
-                if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
-                    shader = pso.tessEvalShader
-                else:
-                    shader = pso.domainShader
-            elif stage == 3:
-                shader = pso.geometryShader
-            elif stage == 4:
-                if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
-                    shader = pso.fragmentShader
-                else:
-                    shader = pso.pixelShader
-            elif stage == 5 and self.isDispatch():
+            if self.isDispatch():
+                if stage != 5:
+                    continue
                 shader = pso.computeShader
+            else:
+                if stage == 0:
+                    shader = pso.vertexShader
+                elif stage == 1:
+                    if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
+                        shader = pso.tessControlShader
+                    else:
+                        shader = pso.hullShader
+                elif stage == 2:
+                    if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
+                        shader = pso.tessEvalShader
+                    else:
+                        shader = pso.domainShader
+                elif stage == 3:
+                    shader = pso.geometryShader
+                elif stage == 4:
+                    if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
+                        shader = pso.fragmentShader
+                    else:
+                        shader = pso.pixelShader
 
             if shader:
                 refl = shader.reflection
@@ -2036,9 +2039,12 @@ class Draw(Event):
                 else:
                     shader_name = get_resource_name(controller, shader.resourceId)
                     shader_name = shader_name.replace('Vertex_Shader', 'vs').replace('Pixel_Shader', 'ps').replace('Compute_Shader', 'cs')
-                    if  program_name:
-                        program_name += '__'
-                    program_name += shader_name
+                    if program_name and shader_name not in shader_name:
+                            # Skip duplicated shader names in same program
+                            program_name += '__'
+                            program_name += shader_name
+                    else:
+                        program_name = shader_name
                 self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage)
                 self.shader_names[stage] = shader_name
 
@@ -2693,6 +2699,10 @@ def visit_draw(controller, draw, level = 1):
         items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').split()
         items = items[0:2]
         name = ' '.join(items)
+        # HACK: dirty trick to make default events in unity prettier in markdown table
+        if name == 'Compute Pass': name = 'Compute_Pass'
+        if name == 'Depth-only Pass': name = 'DepthOnly_Pass'
+        if name == 'Colour Pass': name = 'Colour_Pass'
         g_markers.append(name)
         needsPopMarker = True
 
