@@ -2327,14 +2327,16 @@ class Frame:
     def writeFrameOverview(self, markdown, controller):
         markdown.write('# Frame Overview\n')
 
-        markdown.write('pass|state|(ms)|marker|draws|verts|calls|z|c\n')
-        markdown.write('----|-----|----|------|-----|-----|-----|-|-\n')
+        markdown.write('pass|state|(ms)|marker|draws|instances|verts|calls|z|c\n')
+        markdown.write('----|-----|----|------|-----|---------|-----|-----|-|-\n')
         overviewText = ''
 
+        # TODO: so ugly
         totalPasses = 0
         totalTime = 0
         totalStates = 0
         totalDraws = 0
+        totalInstances = 0
         totalCalls = 0
         totalVerts = 0
         for p in self.passes:
@@ -2349,8 +2351,11 @@ class Frame:
             drawsSummary = ''
             callsSummary = ''
             vertsSummary = ''
+            instancesSummary = ''
+
             time = 0
             draws = 0
+            instances = 0
             states = 0
             calls = 0
             verts = 0
@@ -2361,25 +2366,33 @@ class Frame:
 
                 c = 0
                 v = 0
+                i = 0
                 m = 0
                 draws += len(s.draws)
                 for d in s.draws:
                     c += len(d.draw_desc.events)
-                    v += d.draw_desc.numIndices
+                    if d.draw_desc.numInstances > 1:
+                        i += d.draw_desc.numInstances
+                        v += d.draw_desc.numIndices * d.draw_desc.numInstances
+                    else:
+                        v += d.draw_desc.numIndices
                     m += d.gpu_duration * 1e3
 
                 callsSummary += '%d<br>' % c
                 vertsSummary += '%d<br>' % v
+                instancesSummary += '%d<br>' % i
                 timeSummary += '%.2f<br>' % m
 
                 time += m
                 calls += c
                 verts += v
                 states += 1
+                instances += i
 
             if states > 1:
                 statesSummary += '<br>'
                 drawsSummary += '~%d<br>' % draws
+                instancesSummary += '~%d<br>' % instances
                 callsSummary += '~%d<br>' % calls
                 vertsSummary += '~%d<br>' % verts
                 markersSummary += '<br>'
@@ -2389,6 +2402,7 @@ class Frame:
             totalPasses += 1
             totalTime += time
             totalStates += states
+            totalInstances += instances
             totalDraws += draws
             totalCalls += calls
             totalVerts += verts
@@ -2412,10 +2426,10 @@ class Frame:
             for c in c_filenames:
                 c_info += self.getImageLinkOrNothing(c)
                     
-            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
-            (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, markersSummary, drawsSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
-        overviewText = ('%s|%s|%s|''|%s|%s|%s|%s|%s\n' % 
-        ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, len(uniqueStateCounters)), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
+            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
+            (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, markersSummary, drawsSummary, instancesSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
+        overviewText = ('%s|%s|%s|''|%s|%s|%s|%s|%s|%s\n' % 
+        ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, len(uniqueStateCounters)), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
 
         markdown.write(overviewText)
 
@@ -2698,7 +2712,10 @@ def visit_draw(controller, draw, level = 1):
         # regime call, skip for now
         items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').split()
         items = items[0:2]
-        name = ' '.join(items)
+        if 'Water_Foam' in items[0]:
+            name = '_'.join(items)
+        else:
+            name = ' '.join(items)
         # HACK: dirty trick to make default events in unity prettier in markdown table
         if name == 'Compute Pass': name = 'Compute_Pass'
         if name == 'Depth-only Pass': name = 'DepthOnly_Pass'
