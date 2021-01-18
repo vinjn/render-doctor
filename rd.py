@@ -2164,38 +2164,39 @@ class Draw(Event):
         if self.expanded_marker:
             markdown.write('%s\n\n' % self.expanded_marker)
     
-        # color buffer section
-        if WRITE_RENDER_TARGET:
-            for idx, resource_id in enumerate(self.color_buffers):
-                if not resource_id or resource_id == rd.ResourceId.Null():
-                    continue
-                resource_name = get_resource_name(controller, resource_id)
-                # TODO: ugly
-                file_name = get_resource_filename('%s--%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
-                self.writeTextureMarkdown(markdown, controller, 'c%s: %s' % (idx, resource_name), resource_id, file_name)
-        
-        # depth buffer section
-        if WRITE_DEPTH_BUFFER:
-            if self.depth_buffer != rd.ResourceId.Null():
-                resource_id = self.depth_buffer
-                resource_name = get_resource_name(controller, resource_id)
-                # TODO: ugly again
-                file_name = get_resource_filename('%s--%04d_z' % (resource_name, self.draw_id), IMG_EXT)
-                self.writeTextureMarkdown(markdown, controller, 'z: %s' % (resource_name), resource_id, file_name)
+        if not isDispatch():
+            # color buffer section
+            if WRITE_RENDER_TARGET:
+                for idx, resource_id in enumerate(self.color_buffers):
+                    if not resource_id or resource_id == rd.ResourceId.Null():
+                        continue
+                    resource_name = get_resource_name(controller, resource_id)
+                    # TODO: ugly
+                    file_name = get_resource_filename('%s--%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
+                    self.writeTextureMarkdown(markdown, controller, 'c%s: %s' % (idx, resource_name), resource_id, file_name)
+            
+            # depth buffer section
+            if WRITE_DEPTH_BUFFER:
+                if self.depth_buffer != rd.ResourceId.Null():
+                    resource_id = self.depth_buffer
+                    resource_name = get_resource_name(controller, resource_id)
+                    # TODO: ugly again
+                    file_name = get_resource_filename('%s--%04d_z' % (resource_name, self.draw_id), IMG_EXT)
+                    self.writeTextureMarkdown(markdown, controller, 'z: %s' % (resource_name), resource_id, file_name)
 
-        # texture section
-        markdown.write('\n\n--------\n\n')
-        if WRITE_TEXTURE:
-            for idx, resource_id in enumerate(self.textures):
-                if not resource_id or resource_id == rd.ResourceId.Null():
-                    continue
-                # if idx > 7: # magic
-                    # TODO: uglllllly
-                    # break
-                resource_name = get_resource_name(controller, resource_id)
-                file_name = get_resource_filename(resource_name, IMG_EXT)
-                self.writeTextureMarkdown(markdown, controller, 't%s: %s' % (idx, resource_name), resource_id, file_name)
-        
+            # texture section
+            markdown.write('\n\n--------\n\n')
+            if WRITE_TEXTURE:
+                for idx, resource_id in enumerate(self.textures):
+                    if not resource_id or resource_id == rd.ResourceId.Null():
+                        continue
+                    # if idx > 7: # magic
+                        # TODO: uglllllly
+                        # break
+                    resource_name = get_resource_name(controller, resource_id)
+                    file_name = get_resource_filename(resource_name, IMG_EXT)
+                    self.writeTextureMarkdown(markdown, controller, 't%s: %s' % (idx, resource_name), resource_id, file_name)
+            
         # TODO: add UAV / image etc
 
         # shader section
@@ -2262,6 +2263,9 @@ class Draw(Event):
 
     def exportResources(self, controller):
         if not WRITE_RENDER_TARGET and not WRITE_DEPTH_BUFFER and not WRITE_TEXTURE:
+            return
+
+        if isDispatch():
             return
 
         controller.SetFrameEvent(self.event_id, False)
