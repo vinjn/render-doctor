@@ -38,7 +38,7 @@ import renderdoc as rd
 #######################################
 WRITE_DETALS = False
 WRITE_PIPELINE = True
-WRITE_RENDER_TARGET = True
+WRITE_COLOR_BUFFER = True
 WRITE_TEXTURE = True
 WRITE_DEPTH_BUFFER = True
 WRITE_FAKE_PASSES = False # disabled since I dont like how rdc forms passes
@@ -2066,6 +2066,7 @@ class Draw(Event):
                 highlevel_shader = ''
                 if API_TYPE == rd.GraphicsAPI.OpenGL:
                     highlevel_shader = str(refl.rawBytes, 'utf-8')
+                    highlevel_shader.replace('<', ' < ') # fix a glsl syntax bug
                 else:
                     targets = controller.GetDisassemblyTargets(True)
                     for t in targets:
@@ -2166,7 +2167,7 @@ class Draw(Event):
     
         if not self.isDispatch():
             # color buffer section
-            if WRITE_RENDER_TARGET:
+            if WRITE_COLOR_BUFFER:
                 for idx, resource_id in enumerate(self.color_buffers):
                     if not resource_id or resource_id == rd.ResourceId.Null():
                         continue
@@ -2262,7 +2263,7 @@ class Draw(Event):
             cv2.imwrite(file_name, equ)
 
     def exportResources(self, controller):
-        if not WRITE_RENDER_TARGET and not WRITE_DEPTH_BUFFER and not WRITE_TEXTURE:
+        if not WRITE_COLOR_BUFFER and not WRITE_DEPTH_BUFFER and not WRITE_TEXTURE:
             return
 
         if self.isDispatch():
@@ -2280,12 +2281,12 @@ class Draw(Event):
                 self.exportTexture(controller, resource_id, file_name)
                 
         # WRITE render targtes (aka outputs)
-        if WRITE_RENDER_TARGET:
+        if WRITE_COLOR_BUFFER:
             for idx, resource_id in enumerate(self.color_buffers):
                 if resource_id != rd.ResourceId.Null():
                     resource_name = get_resource_name(controller, resource_id)
                     file_name = get_resource_filename('%s--%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
-                    if WRITE_RENDER_TARGET:
+                    if WRITE_COLOR_BUFFER:
                         self.exportTexture(controller, resource_id, file_name)
 
         # depth
@@ -2364,8 +2365,8 @@ class Frame:
             calls = 0
             verts = 0
             for s in p.states:
-                statesSummary += '%d:[%s](#%s/%s)<br>' % (states+1, s.getName(), p.getName(controller).lower(), s.getUniqueName().lower())
-                markersSummary += '%d:%s<br>' % (states+1, s.draws[-1].marker)
+                statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(controller).lower(), s.getUniqueName().lower())
+                markersSummary += '%s<br>' % (s.draws[-1].marker)
                 drawsSummary += '%d<br>' % (len(s.draws))
 
                 c = 0
@@ -2394,7 +2395,7 @@ class Frame:
                 instances += i
 
             if states > 1:
-                statesSummary += '<br>'
+                statesSummary += '~%d<br>' % states
                 drawsSummary += '~%d<br>' % draws
                 instancesSummary += '~%d<br>' % instances
                 callsSummary += '~%d<br>' % calls
@@ -2411,24 +2412,26 @@ class Frame:
             totalCalls += calls
             totalVerts += verts
 
-            c_filenames = [''] * len(lastDraw.color_buffers)
             z_filename = ''
-            for idx, resource_id in enumerate(lastDraw.color_buffers):
-                if not resource_id or resource_id == rd.ResourceId.Null():
-                    continue
-                resource_name = get_resource_name(controller, resource_id)
-                c_filenames[idx] = get_resource_filename('%s--%04d_c%d' % (resource_name, lastDraw.draw_id, idx), IMG_EXT)
-            
-            # depth buffer section
-            if WRITE_DEPTH_BUFFER:
-                if lastDraw.depth_buffer != rd.ResourceId.Null():
-                    resource_id = lastDraw.depth_buffer
-                    resource_name = get_resource_name(controller, resource_id)
-                    z_filename = get_resource_filename('%s--%04d_z' % (resource_name, lastDraw.draw_id), IMG_EXT)
-
             c_info = ''
-            for c in c_filenames:
-                c_info += self.getImageLinkOrNothing(c)
+
+            if totalVerts != 0:
+                c_filenames = [''] * len(lastDraw.color_buffers)
+                for idx, resource_id in enumerate(lastDraw.color_buffers):
+                    if not resource_id or resource_id == rd.ResourceId.Null():
+                        continue
+                    resource_name = get_resource_name(controller, resource_id)
+                    c_filenames[idx] = get_resource_filename('%s--%04d_c%d' % (resource_name, lastDraw.draw_id, idx), IMG_EXT)
+                
+                # depth buffer section
+                if WRITE_DEPTH_BUFFER:
+                    if lastDraw.depth_buffer != rd.ResourceId.Null():
+                        resource_id = lastDraw.depth_buffer
+                        resource_name = get_resource_name(controller, resource_id)
+                        z_filename = get_resource_filename('%s--%04d_z' % (resource_name, lastDraw.draw_id), IMG_EXT)
+
+                for c in c_filenames:
+                    c_info += self.getImageLinkOrNothing(c)
                     
             overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
             (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, markersSummary, drawsSummary, instancesSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
