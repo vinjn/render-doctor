@@ -2066,7 +2066,7 @@ class Draw(Event):
                 highlevel_shader = ''
                 if API_TYPE == rd.GraphicsAPI.OpenGL:
                     highlevel_shader = str(refl.rawBytes, 'utf-8')
-                    highlevel_shader.replace('<', ' < ') # fix a glsl syntax bug
+                    highlevel_shader = highlevel_shader.replace('<', ' < ') # fix a glsl syntax bug
                 else:
                     targets = controller.GetDisassemblyTargets(True)
                     for t in targets:
