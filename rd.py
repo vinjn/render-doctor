@@ -2164,7 +2164,7 @@ class Draw(Event):
         if self.expanded_marker:
             markdown.write('%s\n\n' % self.expanded_marker)
     
-        if not isDispatch():
+        if not self.isDispatch():
             # color buffer section
             if WRITE_RENDER_TARGET:
                 for idx, resource_id in enumerate(self.color_buffers):
@@ -2265,7 +2265,7 @@ class Draw(Event):
         if not WRITE_RENDER_TARGET and not WRITE_DEPTH_BUFFER and not WRITE_TEXTURE:
             return
 
-        if isDispatch():
+        if self.isDispatch():
             return
 
         controller.SetFrameEvent(self.event_id, False)
