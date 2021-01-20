@@ -2103,7 +2103,7 @@ class Draw(Event):
                         print("Writing %s" % file_name)
                         fp.write(markdeep_lite_head)
                         fp.write('# marker\n %s\n' % self.expanded_marker)
-                        fp.write('# analysis\n %s\n' % shader_analysis)
+                        fp.write('# analysis\n```\n%s \n```\n' % shader_analysis)
                         fp.write('# shader\n')
                         fp.write('```glsl\n')
                         fp.write(highlevel_shader)
