@@ -27,6 +27,7 @@ import pprint
 from datetime import datetime
 from collections import defaultdict, OrderedDict
 from enum import Enum, auto
+import subprocess
 
 sys.path.append('../renderdoc/x64/Development/pymodules')
 os.environ["PATH"] += os.pathsep + os.path.abspath('../renderdoc/x64/Development')
@@ -1996,6 +1997,15 @@ class Draw(Event):
             pso = controller.GetVulkanPipelineState()
 
         program_name = ""
+
+        shader_flags = [
+            '--vertex',
+            '--tessellation_control',
+            '--tessellation_evaluation',
+            '--geometry',
+            '--fragment',
+            '--compute',
+        ]
         for stage in range(0, rd.ShaderStage.Count):
             # C:\svn_pool\renderdoc\renderdoc\api\replay\shader_types.h
             # struct ShaderReflection
@@ -2064,9 +2074,22 @@ class Draw(Event):
 
                 # html
                 highlevel_shader = ''
+                shader_analysis = ''
                 if API_TYPE == rd.GraphicsAPI.OpenGL:
                     highlevel_shader = str(refl.rawBytes, 'utf-8')
                     highlevel_shader = highlevel_shader.replace('<', ' < ') # fix a glsl syntax bug
+                    
+                    malioc_exe = g_assets_folder / '../' / 'mali_offline_compiler/malioc.exe'
+                    if malioc_exe.exists():
+                        args = [
+                            str(malioc_exe),
+                            shader_flags[stage],
+                            file_name
+                        ]
+                        proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+                        shader_analysis, _ = proc.communicate()
+                        shader_analysis = str(shader_analysis, 'utf-8')
+                        shader_analysis = shader_analysis.replace('\r\n\r\n', '\n')
                 else:
                     targets = controller.GetDisassemblyTargets(True)
                     for t in targets:
@@ -2079,8 +2102,10 @@ class Draw(Event):
                     with open(file_name, 'w') as fp:
                         print("Writing %s" % file_name)
                         fp.write(markdeep_lite_head)
+                        fp.write('# marker\n %s\n' % self.expanded_marker)
+                        fp.write('# analysis\n %s\n' % shader_analysis)
+                        fp.write('# shader\n')
                         fp.write('```glsl\n')
-                        fp.write('// %s\n' % self.expanded_marker)
                         fp.write(highlevel_shader)
                         fp.write('\n```\n')
                         fp.write("\n\n")
