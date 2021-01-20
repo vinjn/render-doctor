@@ -2073,32 +2073,32 @@ class Draw(Event):
                         fp.write(refl.rawBytes)
 
                 # html
-                highlevel_shader = ''
-                shader_analysis = ''
-                if API_TYPE == rd.GraphicsAPI.OpenGL:
-                    highlevel_shader = str(refl.rawBytes, 'utf-8')
-                    highlevel_shader = highlevel_shader.replace('<', ' < ') # fix a glsl syntax bug
-                    
-                    malioc_exe = g_assets_folder / '../' / 'mali_offline_compiler/malioc.exe'
-                    if malioc_exe.exists():
-                        args = [
-                            str(malioc_exe),
-                            shader_flags[stage],
-                            file_name
-                        ]
-                        proc = subprocess.Popen(args, stdout=subprocess.PIPE)
-                        shader_analysis, _ = proc.communicate()
-                        shader_analysis = str(shader_analysis, 'utf-8')
-                        shader_analysis = shader_analysis.replace('\r\n\r\n', '\n')
-                else:
-                    targets = controller.GetDisassemblyTargets(True)
-                    for t in targets:
-                        highlevel_shader = controller.DisassembleShader(pipe, refl, t)
-                        break
-
-                file_name = get_resource_filename(g_assets_folder / shader_name, 'html')
-
                 if not Path(file_name).exists():
+                    highlevel_shader = ''
+                    shader_analysis = ''
+                    if API_TYPE == rd.GraphicsAPI.OpenGL:
+                        highlevel_shader = str(refl.rawBytes, 'utf-8')
+                        highlevel_shader = highlevel_shader.replace('<', ' < ') # fix a glsl syntax bug
+                        
+                        malioc_exe = g_assets_folder / '../' / 'mali_offline_compiler/malioc.exe'
+                        if malioc_exe.exists():
+                            args = [
+                                str(malioc_exe),
+                                shader_flags[stage],
+                                file_name
+                            ]
+                            proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+                            shader_analysis, _ = proc.communicate()
+                            shader_analysis = str(shader_analysis, 'utf-8')
+                            shader_analysis = shader_analysis.replace('\r\n\r\n', '\n')
+                    else:
+                        targets = controller.GetDisassemblyTargets(True)
+                        for t in targets:
+                            highlevel_shader = controller.DisassembleShader(pipe, refl, t)
+                            break
+
+                    file_name = get_resource_filename(g_assets_folder / shader_name, 'html')
+
                     with open(file_name, 'w') as fp:
                         print("Writing %s" % file_name)
                         fp.write(markdeep_lite_head)
@@ -2330,6 +2330,13 @@ class Draw(Event):
     color_buffers = None
     depth_buffer = None
 
+def pretty_number(num):
+    if num < 1e3:
+        return str(num)
+    if num < 1e6:
+        return "%.0fK" % (num/1e3)
+    if num < 1e9:
+        return "%.0fK" % (num/1e6)
 class Frame:
     # 
     def __init__(self):
@@ -2357,8 +2364,8 @@ class Frame:
     def writeFrameOverview(self, markdown, controller):
         markdown.write('# Frame Overview\n')
 
-        markdown.write('pass|state|(ms)|marker|draws|instances|verts|calls|z|c\n')
-        markdown.write('----|-----|----|------|-----|---------|-----|-----|-|-\n')
+        markdown.write('pass|state|(ms)|marker|draws|inst#|verts|z|c\n')
+        markdown.write('----|-----|----|------|-----|-----|-----|-|-\n')
         overviewText = ''
 
         # TODO: so ugly
@@ -2409,7 +2416,7 @@ class Frame:
                     m += d.gpu_duration * 1e3
 
                 callsSummary += '%d<br>' % c
-                vertsSummary += '%d<br>' % v
+                vertsSummary += '%s<br>' % pretty_number(v)
                 instancesSummary += '%d<br>' % i
                 timeSummary += '%.2f<br>' % m
 
@@ -2424,7 +2431,7 @@ class Frame:
                 drawsSummary += '~%d<br>' % draws
                 instancesSummary += '~%d<br>' % instances
                 callsSummary += '~%d<br>' % calls
-                vertsSummary += '~%d<br>' % verts
+                vertsSummary += '~%s<br>' % pretty_number(verts)
                 markersSummary += '<br>'
                 timeSummary += '~%.2f<br>' % time
 
@@ -2458,10 +2465,10 @@ class Frame:
                 for c in c_filenames:
                     c_info += self.getImageLinkOrNothing(c)
                     
-            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
-            (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, markersSummary, drawsSummary, instancesSummary, vertsSummary, callsSummary, self.getImageLinkOrNothing(z_filename), c_info))
-        overviewText = ('%s|%s|%s|''|%s|%s|%s|%s|%s|%s\n' % 
-        ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, len(uniqueStateCounters)), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, '%d' % totalVerts, '%d' % totalCalls, '', '')) + overviewText
+            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
+            (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, markersSummary, drawsSummary, instancesSummary, vertsSummary, self.getImageLinkOrNothing(z_filename), c_info))
+        overviewText = ('%s|%s|%s|''|%s|%s|%s|%s|%s\n' % 
+        ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, len(uniqueStateCounters)), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, pretty_number(totalVerts), '', '')) + overviewText
 
         markdown.write(overviewText)
 
