@@ -2334,9 +2334,11 @@ def pretty_number(num):
     if num < 1e3:
         return str(num)
     if num < 1e6:
-        return "%.0fK" % (num/1e3)
+        return "%.1fK" % (num/1e3)
     if num < 1e9:
-        return "%.0fK" % (num/1e6)
+        return "%.1fM" % (num/1e6)
+    return str(num)
+
 class Frame:
     # 
     def __init__(self):
@@ -2365,7 +2367,7 @@ class Frame:
         markdown.write('# Frame Overview\n')
 
         markdown.write('pass|state|(ms)|marker|draws|inst#|verts|z|c\n')
-        markdown.write('----|-----|----|------|-----|-----|-----|-|-\n')
+        markdown.write('----|-----|---:|------|----:|----:|----:|-|-\n')
         overviewText = ''
 
         # TODO: so ugly
@@ -2985,9 +2987,10 @@ def rdc_main(controller):
     global WRITE_TEXTURE
 
     report_name = g_assets_folder / 'index.html'
-    if 'angels' in g_assets_folder.stem:
-        # WAR: make angels report viewable
+    if 'angels' in g_assets_folder.stem or 'atelier' in g_assets_folder.stem:
+        # WAR: make specific reports smaller
         WRITE_TEXTURE = False
+        WRITE_DEPTH_BUFFER = False
 
     fetch_gpu_counters(controller)
     raw_data_generation(controller)
