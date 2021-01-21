@@ -38,6 +38,7 @@ import renderdoc as rd
 ### Config Begin
 #######################################
 WRITE_DETALS = False
+WRITE_MALIOC = True
 WRITE_PIPELINE = True
 WRITE_COLOR_BUFFER = True
 WRITE_TEXTURE = True
@@ -2065,16 +2066,16 @@ class Draw(Event):
                         print(sampler.name)
 
                 # raw txt
-                file_name = get_resource_filename(g_assets_folder / shader_name, 'txt')
+                txt_file_name = get_resource_filename(g_assets_folder / shader_name, 'txt')
 
-                if not Path(file_name).exists():
-                    with open(file_name, 'wb') as fp:
-                        print("Writing %s" % file_name)
+                if not Path(txt_file_name).exists():
+                    with open(txt_file_name, 'wb') as fp:
+                        print("Writing %s" % txt_file_name)
                         fp.write(refl.rawBytes)
 
                 # html
-                file_name = get_resource_filename(g_assets_folder / shader_name, 'html')
-                if not Path(file_name).exists():
+                html_file_name = get_resource_filename(g_assets_folder / shader_name, 'html')
+                if not Path(html_file_name).exists():
                     highlevel_shader = ''
                     shader_analysis = ''
                     if API_TYPE == rd.GraphicsAPI.OpenGL:
@@ -2082,13 +2083,13 @@ class Draw(Event):
                         highlevel_shader = highlevel_shader.replace('<', ' < ') # fix a glsl syntax bug
                         
                         malioc_exe = g_assets_folder / '../' / 'mali_offline_compiler/malioc.exe'
-                        if malioc_exe.exists():
+                        if WRITE_MALIOC and  malioc_exe.exists():
                             args = [
                                 str(malioc_exe),
                                 shader_flags[stage],
-                                file_name
+                                txt_file_name
                             ]
-                            proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+                            proc = subprocess.Popen(args, stdout=subprocess.PIPE, shell=True)
                             shader_analysis, _ = proc.communicate()
                             shader_analysis = str(shader_analysis, 'utf-8')
                             shader_analysis = shader_analysis.replace('\r\n\r\n', '\n')
@@ -2098,11 +2099,12 @@ class Draw(Event):
                             highlevel_shader = controller.DisassembleShader(pipe, refl, t)
                             break
 
-                    with open(file_name, 'w') as fp:
-                        print("Writing %s" % file_name)
+                    with open(html_file_name, 'w') as fp:
+                        print("Writing %s" % html_file_name)
                         fp.write(markdeep_lite_head)
                         fp.write('# marker\n %s\n' % self.expanded_marker)
-                        fp.write('# analysis\n```\n%s \n```\n' % shader_analysis)
+                        if shader_analysis:
+                            fp.write('# analysis\n```\n%s \n```\n' % shader_analysis)
                         fp.write('# shader\n')
                         fp.write('```glsl\n')
                         fp.write(highlevel_shader)
@@ -2189,6 +2191,26 @@ class Draw(Event):
         if self.expanded_marker:
             markdown.write('%s\n\n' % self.expanded_marker)
     
+        # shader section
+        for stage in range(0, rd.ShaderStage.Count):
+            if self.shader_names[stage] != None:
+                # TODO: refactor
+                markdown.write("%s: %s " % (ShaderStage(stage).name, linkable_get_resource_filename(self.shader_names[stage], 'html')))
+
+        # cb / constant buffer section
+        resource_name = 'const_buffer--%04d' % (self.draw_id)
+        file_name = get_resource_filename(resource_name, 'html')
+        with open(g_assets_folder / file_name, 'w') as cb_contents_fp:
+            cb_contents_fp.write(markdeep_head)
+            for stage in range(0, rd.ShaderStage.Count):
+                if self.shader_cb_contents[stage]:
+                    cb_contents_fp.write('# %s\n' % (ShaderStage(stage).name)) # shader type head "VS", "FS" etc
+                    cb_contents_fp.write('```glsl\n')
+                    cb_contents_fp.write(self.shader_cb_contents[stage])
+                    cb_contents_fp.write('\n```\n')
+                    cb_contents_fp.write("\n\n")
+        markdown.write("%s: %s\n\n" % ('CB', link_to_file(resource_name, file_name)))
+
         if not self.isDispatch():
             # color buffer section
             if WRITE_COLOR_BUFFER:
@@ -2221,31 +2243,8 @@ class Draw(Event):
                     resource_name = get_resource_name(controller, resource_id)
                     file_name = get_resource_filename(resource_name, IMG_EXT)
                     self.writeTextureMarkdown(markdown, controller, 't%s: %s' % (idx, resource_name), resource_id, file_name)
-            
-        # TODO: add UAV / image etc
-
-        # shader section
         markdown.write('\n\n')
-        for stage in range(0, rd.ShaderStage.Count):
-            if self.shader_names[stage] != None:
-                # TODO: refactor
-                markdown.write("- %s: %s\n" % (ShaderStage(stage).name, linkable_get_resource_filename(self.shader_names[stage], 'html')))
-
-        # cb / constant buffer section
-        resource_name = 'const_buffer--%04d' % (self.draw_id)
-        file_name = get_resource_filename(resource_name, 'html')
-        with open(g_assets_folder / file_name, 'w') as cb_contents_fp:
-            cb_contents_fp.write(markdeep_head)
-            for stage in range(0, rd.ShaderStage.Count):
-                if self.shader_cb_contents[stage]:
-                    cb_contents_fp.write('# %s\n' % (ShaderStage(stage).name)) # shader type head "VS", "FS" etc
-                    cb_contents_fp.write('```glsl\n')
-                    cb_contents_fp.write(self.shader_cb_contents[stage])
-                    cb_contents_fp.write('\n```\n')
-                    cb_contents_fp.write("\n\n")
-        markdown.write("- %s: %s\n" % ('CB', link_to_file(resource_name, file_name)))
-
-        markdown.write('\n--------\n')
+        # TODO: add UAV / image etc
 
     def exportTexture(self, controller, resource_id, file_name):
         global g_assets_folder
@@ -2990,6 +2989,7 @@ def rdc_main(controller):
         # WAR: make specific reports smaller
         WRITE_TEXTURE = False
         WRITE_DEPTH_BUFFER = False
+        WRITE_MALIOC = False
 
     fetch_gpu_counters(controller)
     raw_data_generation(controller)
