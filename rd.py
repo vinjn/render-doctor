@@ -2049,7 +2049,7 @@ class Draw(Event):
                 else:
                     shader_name = get_resource_name(controller, shader.resourceId)
                     shader_name = shader_name.replace('Vertex_Shader', 'vs').replace('Pixel_Shader', 'ps').replace('Compute_Shader', 'cs')
-                    if program_name and shader_name not in shader_name:
+                    if program_name and shader_name not in program_name:
                             # Skip duplicated shader names in same program
                             program_name += '__'
                             program_name += shader_name
