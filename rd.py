@@ -2073,6 +2073,7 @@ class Draw(Event):
                         fp.write(refl.rawBytes)
 
                 # html
+                file_name = get_resource_filename(g_assets_folder / shader_name, 'html')
                 if not Path(file_name).exists():
                     highlevel_shader = ''
                     shader_analysis = ''
@@ -2096,8 +2097,6 @@ class Draw(Event):
                         for t in targets:
                             highlevel_shader = controller.DisassembleShader(pipe, refl, t)
                             break
-
-                    file_name = get_resource_filename(g_assets_folder / shader_name, 'html')
 
                     with open(file_name, 'w') as fp:
                         print("Writing %s" % file_name)
