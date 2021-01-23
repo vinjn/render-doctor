@@ -1899,6 +1899,7 @@ State.default = State(None)
 class Event:
     def __init__(self, controller, ev, level = 1):
         global g_is_binding_fbo
+        global log_file
 
         sdfile = controller.GetStructuredFile()
         chunks = sdfile.chunks
@@ -1919,22 +1920,22 @@ class Event:
             event_type = D3D11Chunk(cid)
         self.name = event_type.name
 
-        if event_type == GLChunk.glBindFramebuffer or \
-            event_type == VulkanChunk.vkCmdBeginRenderPass or \
-             event_type == D3D11Chunk.OMSetRenderTargets or \
-             event_type == D3D11Chunk.OMSetRenderTargetsAndUnorderedAccessViews:
-            if not g_is_binding_fbo:
-                # non fbo call -> fbo call, marks start of a new pass
-                g_frame.addPass()
-            g_is_binding_fbo = True
-        else:
-            if self.name.find('Draw') != -1 \
+        if self.name.find('Draw') != -1 \
             or self.name.find('Dispatch') != -1 \
             or self.name.find('glDraw') != -1 \
             or self.name.find('glMultiDraw') != -1 \
             or self.name.find('glDispatch') != -1:
-                g_is_binding_fbo = False
-        # markdown.write("`event_%04d %s`\n\n" % (eid, chunkID.name))
+            g_is_binding_fbo = False
+        else:        
+            log_file.write('event_%04d %s\n' % (self.event_id, self.name))
+            if event_type == GLChunk.glBindFramebuffer or \
+                event_type == VulkanChunk.vkCmdBeginRenderPass or \
+                event_type == D3D11Chunk.OMSetRenderTargets or \
+                event_type == D3D11Chunk.OMSetRenderTargetsAndUnorderedAccessViews:
+                if not g_is_binding_fbo:
+                    # non fbo call -> fbo call, marks start of a new pass
+                    g_frame.addPass()
+                g_is_binding_fbo = True
 
     def writeIndexHtml(self, markdown, controller):
         pass
@@ -1951,14 +1952,14 @@ class Event:
 class Draw(Event):
     def __init__(self, controller, draw, level = 1):
         global log_file
-        print("draw %d: %s\n" % (draw.drawcallId, draw.name))
-        log_file.write("draw %d: %s\n" % (draw.drawcallId, draw.name))
+        print('draw %d: %s\n' % (draw.drawcallId, draw.name))
+        log_file.write(' draw_%04d %s\n' % (draw.drawcallId, draw.name))
         self.draw_desc = draw
         self.event_id = draw.eventId
         self.draw_id = draw.drawcallId
         self.name = draw.name
         self.level = level
-        self.pso_key = ""
+        self.pso_key = ''
         self.shader_names = [None] * rd.ShaderStage.Count
         self.shader_cb_contents = [None] * rd.ShaderStage.Count
         self.textures = []
@@ -1979,6 +1980,8 @@ class Draw(Event):
             self.color_buffers.append(output)
         self.depth_buffer = draw.depthOut
 
+        log_file.flush()
+
     def isDispatch(self):
         return self.name.find('Dispatch') != -1
 
@@ -1987,10 +1990,12 @@ class Draw(Event):
 
         if API_TYPE == rd.GraphicsAPI.Vulkan and self.isDispatch():
             # on Android devices, Vulkan dispatch calls will likely crash renderdoc, so we skip them
+            self.pso_key = 'compute_shader'
+            if self.pso_key != State.current.getName():
+                Pass.current.addState(self)
             return
 
         controller.SetFrameEvent(self.event_id, False)
-
         # pso
         pso = None
         state = controller.GetPipelineState()
@@ -2023,7 +2028,7 @@ class Draw(Event):
             shader = None
             shader_name = None
             refl = None
-            shader_id =  state.GetShader(stage)
+            shader_id = state.GetShader(stage)
 
             if self.isDispatch():
                 if stage != 5:
@@ -2051,8 +2056,8 @@ class Draw(Event):
                         shader = pso.pixelShader
 
             if shader_id != rd.ResourceId.Null():
-                log_file.write(str(shader_id))
-                log_file.write('\n')
+                # log_file.write(str(shader_id))
+                # log_file.write('\n')
                 refl = state.GetShaderReflection(stage)
                 if hasattr(shader, 'programResourceId'):
                     program_name = get_resource_name(controller, shader.programResourceId)
@@ -2068,10 +2073,11 @@ class Draw(Event):
                         program_name = shader_name
                 self.shader_names[stage] = shader_name
             else:
-                self.shader_names[stage] = self.marker
+                self.program_name = self.marker
 
             if refl:
-                self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage)
+                if API_TYPE == rd.GraphicsAPI.OpenGL:
+                    self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage)
                 if False:
                     # TODO: sadly ShaderBindpointMapping is always empty :(
                     mapping = shader.bindpointMapping # struct ShaderBindpointMapping
@@ -2139,7 +2145,7 @@ class Draw(Event):
         if self.pso_key != State.current.getName():
             # detects a PSO change
             # TODO: this is too ugly
-            Pass.current.addState(self)        
+            Pass.current.addState(self)
 
     def getPassSummary(self, controller):
         summary = ''
@@ -2302,7 +2308,8 @@ class Draw(Event):
         if not WRITE_COLOR_BUFFER and not WRITE_DEPTH_BUFFER and not WRITE_TEXTURE:
             return
 
-        if self.isDispatch():
+        if API_TYPE == rd.GraphicsAPI.Vulkan and self.isDispatch():
+            # on Android devices, Vulkan dispatch calls will likely crash renderdoc, so we skip them
             return
 
         controller.SetFrameEvent(self.event_id, False)
@@ -2995,24 +3002,27 @@ def rdc_main(controller):
     global g_assets_folder
     global report_name
     global index_html
-    global WRITE_TEXTURE
+    global WRITE_TEXTURE, WRITE_DEPTH_BUFFER, WRITE_MALIOC
     global log_file
 
-    log_file = open(g_assets_folder / 'log.txt',"w") 
+    try:
+        log_file = open(g_assets_folder / 'log.txt',"w") 
 
-    report_name = g_assets_folder / 'index.html'
-    if 'angels' in g_assets_folder.stem or 'atelier' in g_assets_folder.stem:
-        # WAR: make specific reports smaller
-        WRITE_TEXTURE = False
-        WRITE_DEPTH_BUFFER = False
-        WRITE_MALIOC = False
+        report_name = g_assets_folder / 'index.html'
+        if 'angels' in g_assets_folder.stem or 'atelier' in g_assets_folder.stem:
+            # WAR: make specific reports smaller
+            WRITE_TEXTURE = False
+            WRITE_DEPTH_BUFFER = False
+            WRITE_MALIOC = False
 
-    fetch_gpu_counters(controller)
-    raw_data_generation(controller)
-    derived_data_generation(controller)
+        fetch_gpu_counters(controller)
+        raw_data_generation(controller)
+        derived_data_generation(controller)
 
-    index_html = open(report_name,"w") 
-    viz_generation(controller)
+        index_html = open(report_name,"w") 
+        viz_generation(controller)
+    except Exception as e:
+        print(str(e))
 
 def shutdown_rdc(cap, controller):
     controller.Shutdown()
