@@ -49,6 +49,7 @@ WRITE_PSO_DAG = False
 ### Config End
 ########################################
 
+log_file = None
 API_TYPE = None # GraphicsAPI
 IMG_EXT = 'png'
 
@@ -1949,7 +1950,9 @@ class Event:
 
 class Draw(Event):
     def __init__(self, controller, draw, level = 1):
+        global log_file
         print("draw %d: %s\n" % (draw.drawcallId, draw.name))
+        log_file.write("draw %d: %s\n" % (draw.drawcallId, draw.name))
         self.draw_desc = draw
         self.event_id = draw.eventId
         self.draw_id = draw.drawcallId
@@ -1980,6 +1983,12 @@ class Draw(Event):
         return self.name.find('Dispatch') != -1
 
     def collectPipeline(self, controller):
+        global log_file
+
+        if API_TYPE == rd.GraphicsAPI.Vulkan and self.isDispatch():
+            # on Android devices, Vulkan dispatch calls will likely crash renderdoc, so we skip them
+            return
+
         controller.SetFrameEvent(self.event_id, False)
 
         # pso
@@ -2014,6 +2023,7 @@ class Draw(Event):
             shader = None
             shader_name = None
             refl = None
+            shader_id =  state.GetShader(stage)
 
             if self.isDispatch():
                 if stage != 5:
@@ -2040,25 +2050,28 @@ class Draw(Event):
                     else:
                         shader = pso.pixelShader
 
-            if shader:
-                refl = shader.reflection
-
-            if refl:
+            if shader_id != rd.ResourceId.Null():
+                log_file.write(str(shader_id))
+                log_file.write('\n')
+                refl = state.GetShaderReflection(stage)
                 if hasattr(shader, 'programResourceId'):
                     program_name = get_resource_name(controller, shader.programResourceId)
                     shader_name = program_name + '__' + get_resource_name(controller, shader.shaderResourceId)
                 else:
-                    shader_name = get_resource_name(controller, shader.resourceId)
-                    shader_name = shader_name.replace('Vertex_Shader', 'vs').replace('Pixel_Shader', 'ps').replace('Compute_Shader', 'cs')
+                    shader_name = get_resource_name(controller, shader_id)
+                    shader_name = shader_name.replace('Vertex_Shader', 'vs').replace('Pixel_Shader', 'ps').replace('Compute_Shader', 'cs').replace('Shader_Module', 'shader')
                     if program_name and shader_name not in program_name:
                             # Skip duplicated shader names in same program
                             program_name += '__'
                             program_name += shader_name
                     else:
                         program_name = shader_name
-                self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage)
                 self.shader_names[stage] = shader_name
+            else:
+                self.shader_names[stage] = self.marker
 
+            if refl:
+                self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage)
                 if False:
                     # TODO: sadly ShaderBindpointMapping is always empty :(
                     mapping = shader.bindpointMapping # struct ShaderBindpointMapping
@@ -2983,6 +2996,9 @@ def rdc_main(controller):
     global report_name
     global index_html
     global WRITE_TEXTURE
+    global log_file
+
+    log_file = open(g_assets_folder / 'log.txt',"w") 
 
     report_name = g_assets_folder / 'index.html'
     if 'angels' in g_assets_folder.stem or 'atelier' in g_assets_folder.stem:
