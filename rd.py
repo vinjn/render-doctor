@@ -2230,7 +2230,9 @@ class Draw(Event):
                         cb_contents_fp.write(self.shader_cb_contents[stage])
                         cb_contents_fp.write('\n```\n')
                         cb_contents_fp.write("\n\n")
-            markdown.write("%s: %s\n\n" % ('CB', link_to_file(resource_name, file_name)))
+            markdown.write("%s: %s" % ('CB', link_to_file(resource_name, file_name)))
+
+        markdown.write('\n\n')
 
         if not self.isDispatch():
             # color buffer section
