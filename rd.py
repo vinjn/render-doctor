@@ -39,6 +39,7 @@ import renderdoc as rd
 #######################################
 WRITE_DETALS = False
 WRITE_MALIOC = True
+WRITE_CONST_BUFFER = False
 WRITE_PIPELINE = True
 WRITE_COLOR_BUFFER = True
 WRITE_TEXTURE = True
@@ -2076,7 +2077,7 @@ class Draw(Event):
                 self.program_name = self.marker
 
             if refl:
-                if API_TYPE == rd.GraphicsAPI.OpenGL:
+                if API_TYPE == rd.GraphicsAPI.OpenGL and WRITE_CONST_BUFFER:
                     self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage)
                 if False:
                     # TODO: sadly ShaderBindpointMapping is always empty :(
@@ -2217,18 +2218,19 @@ class Draw(Event):
                 markdown.write("%s: %s " % (ShaderStage(stage).name, linkable_get_resource_filename(self.shader_names[stage], 'html')))
 
         # cb / constant buffer section
-        resource_name = 'const_buffer--%04d' % (self.draw_id)
-        file_name = get_resource_filename(resource_name, 'html')
-        with open(g_assets_folder / file_name, 'w') as cb_contents_fp:
-            cb_contents_fp.write(markdeep_head)
-            for stage in range(0, rd.ShaderStage.Count):
-                if self.shader_cb_contents[stage]:
-                    cb_contents_fp.write('# %s\n' % (ShaderStage(stage).name)) # shader type head "VS", "FS" etc
-                    cb_contents_fp.write('```glsl\n')
-                    cb_contents_fp.write(self.shader_cb_contents[stage])
-                    cb_contents_fp.write('\n```\n')
-                    cb_contents_fp.write("\n\n")
-        markdown.write("%s: %s\n\n" % ('CB', link_to_file(resource_name, file_name)))
+        if WRITE_CONST_BUFFER:
+            resource_name = 'const_buffer--%04d' % (self.draw_id)
+            file_name = get_resource_filename(resource_name, 'html')
+            with open(g_assets_folder / file_name, 'w') as cb_contents_fp:
+                cb_contents_fp.write(markdeep_head)
+                for stage in range(0, rd.ShaderStage.Count):
+                    if self.shader_cb_contents[stage]:
+                        cb_contents_fp.write('# %s\n' % (ShaderStage(stage).name)) # shader type head "VS", "FS" etc
+                        cb_contents_fp.write('```glsl\n')
+                        cb_contents_fp.write(self.shader_cb_contents[stage])
+                        cb_contents_fp.write('\n```\n')
+                        cb_contents_fp.write("\n\n")
+            markdown.write("%s: %s\n\n" % ('CB', link_to_file(resource_name, file_name)))
 
         if not self.isDispatch():
             # color buffer section
