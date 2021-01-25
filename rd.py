@@ -54,7 +54,7 @@ API_TYPE = None # GraphicsAPI
 IMG_EXT = 'png'
 
 def getSafeName(name):
-    return name.replace('/', '_').replace('#', '_').replace(' ', '_').replace('(', '_').replace(')', '_').replace('.', '_').replace(':', '_').replace('|', '_')
+    return name.replace('/', '_').replace('#', '_').replace(' ', '_').replace('(', '_').replace(')', '_').replace('.', '_').replace(':', '_').replace('|', '_').replace('-', '_')
 
 class ShaderStage(Enum):
     VS = 0
@@ -2064,7 +2064,7 @@ class Draw(Event):
                     shader_name = program_name + '__' + get_resource_name(controller, shader.shaderResourceId)
                 else:
                     shader_name = get_resource_name(controller, shader_id)
-                    shader_name = shader_name.replace('Vertex_Shader', 'vs').replace('Pixel_Shader', 'ps').replace('Compute_Shader', 'cs').replace('Shader_Module', 'shader')
+                    shader_name = shader_name.replace('Vertex_Shader', 'vs').replace('Pixel_Shader', 'ps').replace('Compute_Shader', 'cs').replace('Shader_Module', 'shader').replace('Geometry_Shader', 'gs')
                     if program_name and shader_name not in program_name:
                             # Skip duplicated shader names in same program
                             program_name += '__'
