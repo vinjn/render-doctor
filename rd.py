@@ -2775,7 +2775,7 @@ def visit_draw(controller, draw, level = 1):
         # regime call, skip for now
         items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').split()
         items = items[0:2]
-        if 'Water_Foam' in items[0]:
+        if len(items) > 1 and 'main_geo' in items[1]:
             name = '_'.join(items)
         else:
             name = ' '.join(items)
