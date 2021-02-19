@@ -46,6 +46,7 @@ WRITE_TEXTURE = True
 WRITE_DEPTH_BUFFER = True
 WRITE_FAKE_PASSES = False # disabled since I dont like how rdc forms passes
 WRITE_PSO_DAG = False
+FULL_MARKER_NAME = True
 #######################################
 ### Config End
 ########################################
@@ -2773,16 +2774,19 @@ def visit_draw(controller, draw, level = 1):
             State.current.addDraw(new_draw)
     else:
         # regime call, skip for now
-        items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').split()
-        items = items[0:2]
-        if len(items) > 1 and 'main_geo' in items[1]:
-            name = '_'.join(items)
+        items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').replace('-',' ').replace('=>',' ').split()
+        if not FULL_MARKER_NAME:
+            items = items[0:2]
+            if 'main_geo' in items[1]:
+                name = '_'.join(items)
+            else:
+                name = ' '.join(items)
         else:
-            name = ' '.join(items)
-        # HACK: dirty trick to make default events in unity prettier in markdown table
-        if name == 'Compute Pass': name = 'Compute_Pass'
-        if name == 'Depth-only Pass': name = 'DepthOnly_Pass'
-        if name == 'Colour Pass': name = 'Colour_Pass'
+            name = '_'.join(items)
+        # # HACK: dirty trick to make default events in unity prettier in markdown table
+        # if name == 'Compute Pass': name = 'Compute_Pass'
+        # if name == 'Depth-only Pass': name = 'DepthOnly_Pass'
+        # if name == 'Colour Pass': name = 'Colour_Pass'
         g_markers.append(name)
         needsPopMarker = True
 
@@ -3006,7 +3010,7 @@ def rdc_main(controller):
     global g_assets_folder
     global report_name
     global index_html
-    global WRITE_TEXTURE, WRITE_DEPTH_BUFFER, WRITE_MALIOC
+    global WRITE_TEXTURE, WRITE_DEPTH_BUFFER, WRITE_MALIOC, FULL_MARKER_NAME
     global log_file
 
     try:
@@ -3018,6 +3022,7 @@ def rdc_main(controller):
             WRITE_TEXTURE = False
             WRITE_DEPTH_BUFFER = False
             WRITE_MALIOC = False
+            FULL_MARKER_NAME = True
 
         fetch_gpu_counters(controller)
         raw_data_generation(controller)
