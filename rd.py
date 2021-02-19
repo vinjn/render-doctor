@@ -1809,10 +1809,17 @@ class State:
         self.draws = []
         self.name = 'default'
         self.unique_name = self.name
-        State.s_id += 1            
+        # TODO: refactor
+        self.vs_name = ''
+        self.ps_name = ''
+        self.cs_name = ''
+        State.s_id += 1
 
         if draw:
             self.name = draw.pso_key
+            self.vs_name = draw.short_shader_names[rd.ShaderStage.Vertex]
+            self.ps_name = draw.short_shader_names[rd.ShaderStage.Pixel]
+            self.cs_name = draw.short_shader_names[rd.ShaderStage.Compute]
 
             if self.name in uniqueStateCounters:
                 uniqueStateCounters[self.name] += 1
@@ -1962,6 +1969,7 @@ class Draw(Event):
         self.name = draw.name
         self.level = level
         self.pso_key = ''
+        self.short_shader_names = [None] * rd.ShaderStage.Count
         self.shader_names = [None] * rd.ShaderStage.Count
         self.shader_cb_contents = [None] * rd.ShaderStage.Count
         self.textures = []
@@ -2029,6 +2037,7 @@ class Draw(Event):
             # TODO: refactor
             shader = None
             shader_name = None
+            short_shader_name = None
             refl = None
             shader_id = state.GetShader(stage)
 
@@ -2065,17 +2074,20 @@ class Draw(Event):
                 refl = state.GetShaderReflection(stage)
                 if hasattr(shader, 'programResourceId'):
                     program_name = get_resource_name(controller, shader.programResourceId)
-                    shader_name = program_name + '__' + get_resource_name(controller, shader.shaderResourceId)
+                    short_shader_name = get_resource_name(controller, shader.shaderResourceId)
+                    shader_name = program_name + '__' + short_shader_name
                 else:
-                    shader_name = get_resource_name(controller, shader_id)
-                    shader_name = shader_name.replace('Vertex_Shader', 'vs').replace('Pixel_Shader', 'ps').replace('Compute_Shader', 'cs').replace('Shader_Module', 'shader').replace('Geometry_Shader', 'gs')
-                    if program_name and shader_name not in program_name:
+                    short_shader_name = get_resource_name(controller, shader_id)
+                    short_shader_name = short_shader_name.replace('Vertex_Shader', 'vs').replace('Pixel_Shader', 'ps').replace('Compute_Shader', 'cs').replace('Shader_Module', 'shader').replace('Geometry_Shader', 'gs')
+                    if program_name and short_shader_name not in program_name:
                             # Skip duplicated shader names in same program
                             program_name += '__'
-                            program_name += shader_name
+                            program_name += short_shader_name
                     else:
-                        program_name = shader_name
+                        program_name = short_shader_name
+                    shader_name = short_shader_name
                 self.shader_names[stage] = shader_name
+                self.short_shader_names[stage] = short_shader_name
             else:
                 self.program_name = self.marker
 
@@ -2389,9 +2401,14 @@ class Frame:
         return '![](%s border="2" width="%s")' % (filename, '50%')
 
     def writeFrameOverview(self, markdown, controller):
+
+        summary_csv = open(g_assets_folder / 'summary.csv',"w") 
+
         markdown.write('# Frame Overview\n')
 
-        markdown.write('pass|state|(ms)|marker|draws|instances|verts|z|c\n')
+        header = 'pass|state|(ms)|marker|draws|instances|verts|z|c\n'
+        summary_csv.write(header.replace('|',','))
+        markdown.write(header)
         markdown.write('----|-----|---:|------|----:|--------:|----:|-|-\n')
         overviewText = ''
 
@@ -2446,6 +2463,10 @@ class Frame:
                 vertsSummary += '%s<br>' % pretty_number(v)
                 instancesSummary += '%d<br>' % i
                 timeSummary += '%.2f<br>' % m
+
+                summary_csv.write('%s,%s,%.3f,%s,%d,%d,%d,%s,%s\n' %(p.getName(controller).lower(), s.getName(), m, s.draws[-1].marker, 
+                    len(s.draws), i, v, 
+                    s.vs_name or s.cs_name, s.ps_name or ''))
 
                 time += m
                 calls += c
