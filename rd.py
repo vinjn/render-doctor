@@ -2056,6 +2056,8 @@ class Draw(Event):
                         shader = pso.fragmentShader
                     else:
                         shader = pso.pixelShader
+                elif stage == 5:
+                    continue
 
             if shader_id != rd.ResourceId.Null():
                 # log_file.write(str(shader_id))
@@ -2389,8 +2391,8 @@ class Frame:
     def writeFrameOverview(self, markdown, controller):
         markdown.write('# Frame Overview\n')
 
-        markdown.write('pass|state|(ms)|marker|draws|inst#|verts|z|c\n')
-        markdown.write('----|-----|---:|------|----:|----:|----:|-|-\n')
+        markdown.write('pass|state|(ms)|marker|draws|instances|verts|z|c\n')
+        markdown.write('----|-----|---:|------|----:|--------:|----:|-|-\n')
         overviewText = ''
 
         # TODO: so ugly
@@ -2774,7 +2776,8 @@ def visit_draw(controller, draw, level = 1):
             State.current.addDraw(new_draw)
     else:
         # regime call, skip for now
-        items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').replace('-',' ').replace('=>',' ').split()
+        # TODO: leverate getSafeName() 
+        items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').replace('-',' ').replace('=>',' ').replace('#',' ').split()
         if not FULL_MARKER_NAME:
             items = items[0:2]
             if 'main_geo' in items[1]:
@@ -2783,10 +2786,7 @@ def visit_draw(controller, draw, level = 1):
                 name = ' '.join(items)
         else:
             name = '_'.join(items)
-        # # HACK: dirty trick to make default events in unity prettier in markdown table
-        # if name == 'Compute Pass': name = 'Compute_Pass'
-        # if name == 'Depth-only Pass': name = 'DepthOnly_Pass'
-        # if name == 'Colour Pass': name = 'Colour_Pass'
+
         g_markers.append(name)
         needsPopMarker = True
 
