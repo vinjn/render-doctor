@@ -3043,7 +3043,7 @@ def rdc_main(controller):
             WRITE_TEXTURE = False
             WRITE_DEPTH_BUFFER = False
             WRITE_MALIOC = False
-            FULL_MARKER_NAME = True
+            FULL_MARKER_NAME = False
 
         fetch_gpu_counters(controller)
         raw_data_generation(controller)
