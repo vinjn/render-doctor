@@ -22,6 +22,7 @@
 
 import os
 import sys
+import math
 from pathlib import Path, WindowsPath
 import pprint
 from datetime import datetime
@@ -74,7 +75,7 @@ class GLChunk(Enum):
     InitialContents = auto
     CaptureBegin = auto
     CaptureScope = auto
-    CaptureEnd = auto
+    CaptureEnd = 6
 
     FirstDriverChunk = 1000
 
@@ -1979,6 +1980,8 @@ class Draw(Event):
         self.gpu_duration = 0
         if self.event_id in g_draw_durations:
             self.gpu_duration = g_draw_durations[self.event_id]
+            if math.isnan(self.gpu_duration):
+                self.gpu_duration = 0
 
         global g_assets_folder
 
