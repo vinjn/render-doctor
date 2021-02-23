@@ -46,7 +46,6 @@ WRITE_TEXTURE = True
 WRITE_DEPTH_BUFFER = True
 WRITE_FAKE_PASSES = False # disabled since I dont like how rdc forms passes
 WRITE_PSO_DAG = False
-FULL_MARKER_NAME = True
 #######################################
 ### Config End
 ########################################
@@ -2799,14 +2798,7 @@ def visit_draw(controller, draw, level = 1):
         # regime call, skip for now
         # TODO: leverate getSafeName() 
         items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').replace('-',' ').replace('=>',' ').replace('#',' ').split()
-        if not FULL_MARKER_NAME and len(items) > 2:
-            items = items[0:2]
-            if 'main_geo' in items[1]:
-                name = '_'.join(items)
-            else:
-                name = ' '.join(items)
-        else:
-            name = '_'.join(items)
+        name = '_'.join(items)
 
         g_markers.append(name)
         needsPopMarker = True
@@ -3031,7 +3023,7 @@ def rdc_main(controller):
     global g_assets_folder
     global report_name
     global index_html
-    global WRITE_TEXTURE, WRITE_DEPTH_BUFFER, WRITE_MALIOC, FULL_MARKER_NAME
+    global WRITE_TEXTURE, WRITE_DEPTH_BUFFER, WRITE_MALIOC
     global log_file
 
     try:
@@ -3041,7 +3033,6 @@ def rdc_main(controller):
         if 'atelier' in g_assets_folder.stem:
             # WAR: make specific reports smaller
             WRITE_TEXTURE = False
-            FULL_MARKER_NAME = False
 
         fetch_gpu_counters(controller)
         raw_data_generation(controller)
