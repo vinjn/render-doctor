@@ -2461,7 +2461,10 @@ class Frame:
                 callsSummary += '%d<br>' % c
                 vertsSummary += '%s<br>' % pretty_number(v)
                 instancesSummary += '%d<br>' % i
-                timeSummary += '%.2f<br>' % m
+                if m > 0.5:
+                    timeSummary += '**%.2f**<br>' % m
+                else:
+                    timeSummary += '%.2f<br>' % m
 
                 summary_csv.write('%s,%s,%.3f,%s,%d,%d,%d,%s,%s\n' %(p.getName(controller).lower(), s.getName(), m, s.draws[-1].marker, 
                     len(s.draws), i, v, 
