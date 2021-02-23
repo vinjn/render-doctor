@@ -3038,11 +3038,9 @@ def rdc_main(controller):
         log_file = open(g_assets_folder / 'log.txt',"w") 
 
         report_name = g_assets_folder / 'index.html'
-        if 'angels' in g_assets_folder.stem or 'atelier' in g_assets_folder.stem:
+        if 'atelier' in g_assets_folder.stem:
             # WAR: make specific reports smaller
             WRITE_TEXTURE = False
-            WRITE_DEPTH_BUFFER = False
-            WRITE_MALIOC = False
             FULL_MARKER_NAME = False
 
         fetch_gpu_counters(controller)
