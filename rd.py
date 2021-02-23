@@ -2441,7 +2441,6 @@ class Frame:
             verts = 0
             for s in p.states:
                 statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(controller).lower(), s.getUniqueName().lower())
-                markersSummary += '%s<br>' % s.draws[-1].marker
                 drawsSummary += '[%d](%s.html)<br>' % (len(s.draws), s.getUniqueName().lower())
 
                 c = 0
@@ -2462,8 +2461,10 @@ class Frame:
                 vertsSummary += '%s<br>' % pretty_number(v)
                 instancesSummary += '%d<br>' % i
                 if m > 0.5:
-                    timeSummary += '**%.2f**<br>' % m
+                    markersSummary += '<b>%s</b><br>' % s.draws[-1].marker
+                    timeSummary += '<b>%.2f</b><br>' % m
                 else:
+                    markersSummary += '%s<br>' % s.draws[-1].marker
                     timeSummary += '%.2f<br>' % m
 
                 summary_csv.write('%s,%s,%.3f,%s,%d,%d,%d,%s,%s\n' %(p.getName(controller).lower(), s.getName(), m, s.draws[-1].marker, 
