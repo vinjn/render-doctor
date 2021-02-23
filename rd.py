@@ -2442,7 +2442,7 @@ class Frame:
             for s in p.states:
                 statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(controller).lower(), s.getUniqueName().lower())
                 markersSummary += '%s<br>' % s.draws[-1].marker
-                drawsSummary += '[%d](%s.html)<br>' % (len(s.draws), s.getName())
+                drawsSummary += '[%d](%s.html)<br>' % (len(s.draws), s.getUniqueName().lower())
 
                 c = 0
                 v = 0
