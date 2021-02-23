@@ -2799,7 +2799,7 @@ def visit_draw(controller, draw, level = 1):
         # regime call, skip for now
         # TODO: leverate getSafeName() 
         items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').replace('-',' ').replace('=>',' ').replace('#',' ').split()
-        if not FULL_MARKER_NAME:
+        if not FULL_MARKER_NAME and len(items) > 2:
             items = items[0:2]
             if 'main_geo' in items[1]:
                 name = '_'.join(items)
