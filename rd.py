@@ -56,7 +56,7 @@ API_TYPE = None # GraphicsAPI
 IMG_EXT = 'png'
 
 def getSafeName(name):
-    return name.replace('/', '_').replace('#', '_').replace(' ', '_').replace('(', '_').replace(')', '_').replace('.', '_').replace(':', '_').replace('|', '_').replace('-', '_')
+    return name.replace('/', '_').replace('#', '_').replace(' ', '_').replace('(', '_').replace(')', '_').replace('.', '_').replace(':', '_').replace('|', '_').replace('-', '_').replace('{', '_').replace('}', '_')
 
 class ShaderStage(Enum):
     VS = 0
@@ -1685,6 +1685,7 @@ class VulkanChunk(Enum):
 pp = pprint.PrettyPrinter(indent=4)
 
 g_is_binding_fbo = True # using this variable to separate passes
+g_next_draw_will_add_state = False # using this variable to separate passes
 g_markers = []
 g_draw_durations = {}
 
@@ -1909,6 +1910,7 @@ class Event:
     def __init__(self, controller, ev, level = 1):
         global g_is_binding_fbo
         global log_file
+        global g_next_draw_will_add_state
 
         sdfile = controller.GetStructuredFile()
         chunks = sdfile.chunks
@@ -1943,7 +1945,7 @@ class Event:
                 event_type == D3D11Chunk.OMSetRenderTargetsAndUnorderedAccessViews:
                 if not g_is_binding_fbo:
                     # non fbo call -> fbo call, marks start of a new pass
-                    g_frame.addPass()
+                    g_next_draw_will_add_state = True
                 g_is_binding_fbo = True
 
     def writeIndexHtml(self, markdown, controller):
@@ -1983,21 +1985,30 @@ class Draw(Event):
             if math.isnan(self.gpu_duration):
                 self.gpu_duration = 0
 
-        global g_assets_folder
-
-        if WRITE_PIPELINE:
-            self.collectPipeline(controller)
-
         for output in draw.outputs:
             self.color_buffers.append(output)
         self.depth_buffer = draw.depthOut
 
         log_file.flush()
 
+    def sharesState(self, other):
+        if self.depth_buffer != other.depth_buffer:
+            return False
+        if len(self.color_buffers) != len(other.color_buffers):
+            return False
+        for i in range(0, len(self.color_buffers)):
+            if self.color_buffers[i] != other.color_buffers[i]:
+                return False
+
+        return True
+        
     def isDispatch(self):
         return self.name.find('Dispatch') != -1
 
     def collectPipeline(self, controller):
+        if not WRITE_PIPELINE:
+            return
+
         global log_file
 
         if API_TYPE == rd.GraphicsAPI.Vulkan and self.isDispatch():
@@ -2075,9 +2086,23 @@ class Draw(Event):
                 # log_file.write('\n')
                 refl = state.GetShaderReflection(stage)
                 if hasattr(shader, 'programResourceId'):
+                    # Opengl
                     program_name = get_resource_name(controller, shader.programResourceId)
                     short_shader_name = get_resource_name(controller, shader.shaderResourceId)
                     shader_name = program_name + '__' + short_shader_name
+                elif hasattr(pso, 'pipelineResourceId'):
+                    # DX12
+                    program_name = get_resource_name(controller, pso.pipelineResourceId)
+                    program_name = program_name.replace('Pipeline_State', 'pso')
+                    short_shader_name = get_resource_name(controller, shader_id)
+                    shader_name = program_name + '__' + short_shader_name
+                elif hasattr(pso, 'graphics') or hasattr(pso, 'compute'):
+                    # Vulkan
+                    p = pso.graphics or pso.graphics
+                    program_name = get_resource_name(controller, p.pipelineResourceId)
+                    program_name = program_name.replace('Pipeline', 'pso')
+                    short_shader_name = get_resource_name(controller, shader_id)
+                    shader_name = program_name + '__' + short_shader_name                                      
                 else:
                     short_shader_name = get_resource_name(controller, shader_id)
                     short_shader_name = short_shader_name.replace('Vertex_Shader', 'vs').replace('Pixel_Shader', 'ps').replace('Compute_Shader', 'cs').replace('Shader_Module', 'shader').replace('Geometry_Shader', 'gs')
@@ -2769,7 +2794,7 @@ def setup_rdc(filename, adb_mode = None):
     print("cap.OpenCapture")
 
     if status != rd.ReplayStatus.Succeeded:
-        raise RuntimeError("Couldn't initialise replay: " + str(status))
+        raise RuntimeError("Couldn't initialise replay: " + rd.ReplayStatus(status).name)
 
     return cap, controller
 
@@ -2785,7 +2810,7 @@ def get_marker_name():
 # Define a recursive function for iterating over draws
 def visit_draw(controller, draw, level = 1):
     # hack level
-    global g_markers
+    global g_markers, g_next_draw_will_add_state
     level = 1
     if draw.name == 'API Calls':
         pass
@@ -2800,6 +2825,17 @@ def visit_draw(controller, draw, level = 1):
 
         if  draw.flags & rd.DrawFlags.Drawcall or draw.flags & rd.DrawFlags.Dispatch or draw.flags & rd.DrawFlags.MultiDraw:
             new_draw = Draw(controller, draw, level)
+
+            if g_next_draw_will_add_state:
+                # and check duplicated binds...
+                g_next_draw_will_add_state = False
+                prev_draw = State.current.getLastDraw()
+                if not prev_draw:
+                    g_frame.addPass()
+                elif not new_draw.sharesState(prev_draw):
+                    g_frame.addPass()
+
+            new_draw.collectPipeline(controller)
             State.current.addDraw(new_draw)
     else:
         # regime call, skip for now
