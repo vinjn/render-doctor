@@ -2111,7 +2111,7 @@ class Draw(Event):
                             program_name += '__'
                             program_name += short_shader_name
                     else:
-                        program_name = short_shader_name
+                        program_name = 's_' + short_shader_name
                     shader_name = short_shader_name
                 self.shader_names[stage] = shader_name
                 self.short_shader_names[stage] = short_shader_name
