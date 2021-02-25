@@ -2804,7 +2804,10 @@ def get_expanded_marker_name():
 
 def get_marker_name():
     if len(g_markers) > 0:
-        return g_markers[-1]
+        name = g_markers[-1]
+        if len(name) > 30:
+         name = name[0:27] + '...'
+        return name
     return ''
 
 # Define a recursive function for iterating over draws
