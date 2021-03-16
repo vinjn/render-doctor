@@ -50,7 +50,8 @@ WRITE_PSO_DAG = False
 ### Config End
 ########################################
 
-log_file = None
+api_full_log = None
+api_short_log = None
 API_TYPE = None # GraphicsAPI
 IMG_EXT = 'png'
 
@@ -1906,9 +1907,9 @@ class State:
 State.default = State(None)
 
 class Event:
-    def __init__(self, controller, ev, level = 1):
+    def __init__(self, controller, ev, level = 0):
         global g_is_binding_fbo
-        global log_file
+        global api_full_log
         global g_next_draw_will_add_state
 
         sdfile = controller.GetStructuredFile()
@@ -1933,8 +1934,8 @@ class Event:
         if self.name.find('Draw') != -1 \
             or self.name.find('Dispatch') != -1:
             g_is_binding_fbo = False
-        else:        
-            log_file.write('event_%04d %s\n' % (self.event_id, self.name))
+        else:
+            api_full_log.write('%s%04d %s\n' % ('    ' * level, self.event_id, self.name))
             if event_type == GLChunk.glBindFramebuffer or \
                 event_type == VulkanChunk.vkCmdBeginRenderPass or \
                 event_type == D3D11Chunk.OMSetRenderTargets or \
@@ -1957,10 +1958,12 @@ class Event:
     chunk_id = None
 
 class Draw(Event):
-    def __init__(self, controller, draw, level = 1):
-        global log_file
+    def __init__(self, controller, draw, level = 0):
+        global api_full_log
+        global api_short_log
         print('draw %d: %s\n' % (draw.drawcallId, draw.name))
-        log_file.write(' draw_%04d %s\n' % (draw.drawcallId, draw.name))
+        api_full_log.write('%sdraw_%04d %s\n' % ('    ' * level, draw.drawcallId, draw.name))
+        api_short_log.write('%s%04d %s\n' % ('    ' * level, draw.drawcallId, draw.name))
         self.draw_desc = draw
         self.event_id = draw.eventId
         self.draw_id = draw.drawcallId
@@ -1985,7 +1988,8 @@ class Draw(Event):
             self.color_buffers.append(output)
         self.depth_buffer = draw.depthOut
 
-        log_file.flush()
+        # api_full_log.flush()
+        # api_short_log.flush()
 
     def sharesState(self, other):
         if self.depth_buffer != other.depth_buffer:
@@ -2020,7 +2024,7 @@ class Draw(Event):
                 Pass.current.addState(self)
             return
 
-        global log_file
+        global api_full_log
 
         if API_TYPE == rd.GraphicsAPI.Vulkan and self.isDispatch():
             # on Android devices, Vulkan dispatch calls will likely crash renderdoc, so we skip them
@@ -2093,8 +2097,8 @@ class Draw(Event):
                     continue
 
             if shader_id != rd.ResourceId.Null():
-                # log_file.write(str(shader_id))
-                # log_file.write('\n')
+                # api_full_log.write(str(shader_id))
+                # api_full_log.write('\n')
                 refl = state.GetShaderReflection(stage)
                 if hasattr(shader, 'programResourceId'):
                     # Opengl
@@ -2233,7 +2237,11 @@ class Draw(Event):
 
     def writeTextureMarkdown(self, markdown, controller, caption_suffix, resource_id, texture_file_name):
         res_info = get_texture_info(controller, resource_id)
-        res_info_text = '(%dX%d %s)' % (res_info.width, res_info.height, rd.ResourceFormat(res_info.format).Name() )
+        if res_info.mips > 1:
+            res_info_text = '(%dX%d %d mips %s)' % (res_info.width, res_info.height, res_info.mips, rd.ResourceFormat(res_info.format).Name() )
+        else:
+            res_info_text = '(%dX%d %s)' % (res_info.width, res_info.height, rd.ResourceFormat(res_info.format).Name() )
+
         # enum class ResourceFormatType
         # rdcstr ResourceFormatName(const ResourceFormat &fmt)
         # markdown.write('<img src="%s" class="lazyload" data-src="%s" width=%s border="2">\n' % ('../src/logo.png', texture_file_name, '50%'))
@@ -2336,7 +2344,7 @@ class Draw(Event):
         res_info = get_texture_info(controller, resource_id)
 
         texsave = rd.TextureSave()
-        if res_info.creationFlags & rd.TextureCategory.ColorTarget:
+        if res_info.mips == 1:
             texsave.alpha = rd.AlphaMapping.Discard
             texsave.destType = rd.FileType.JPG
         else:
@@ -2571,7 +2579,7 @@ class Frame:
         if has_clear_state:
             # remove "Clear" state
             uniqueStateCounter -= 1
-        overviewText = ('%s|%s|%s|''|%s|%s|%s|%s|%s\n' % 
+        overviewText = ('%s|%s|%s|''|[%s](api_short.log)|%s|%s|%s|%s\n' % 
         ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, pretty_number(totalVerts), '', '')) + overviewText
 
         markdown.write(overviewText)
@@ -2839,10 +2847,10 @@ def get_marker_name():
     return ''
 
 # Define a recursive function for iterating over draws
-def visit_draw(controller, draw, level = 1):
+def visit_draw(controller, draw, level = 0):
     # hack level
     global g_markers, g_next_draw_will_add_state
-    level = 1
+    global api_full_log, api_short_log
     if draw.name == 'API Calls':
         pass
     
@@ -2851,7 +2859,7 @@ def visit_draw(controller, draw, level = 1):
     if draw.events:
         # api before this draw & including this draw
         for ev in draw.events:
-            new_event = Event(controller, ev, level+1)
+            new_event = Event(controller, ev, level)
             State.current.addEvent(new_event)
 
         if  draw.flags & rd.DrawFlags.Drawcall \
@@ -2874,7 +2882,9 @@ def visit_draw(controller, draw, level = 1):
             State.current.addDraw(new_draw)
     else:
         # regime call, skip for now
-        # TODO: leverate getSafeName() 
+        # TODO: leverate getSafeName()
+        api_full_log.write('%s%04d %s\n' % ('    ' * level, draw.eventId, draw.name))
+        api_short_log.write('%s%04d %s\n' % ('    ' * level, draw.drawcallId, draw.name))
         items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').replace('-',' ').replace('=>',' ').replace('#',' ').split()
         name = '_'.join(items)
 
@@ -3043,10 +3053,11 @@ def rdc_main(controller):
     global report_name
     global index_html
     global WRITE_TEXTURE, WRITE_DEPTH_BUFFER, WRITE_MALIOC
-    global log_file
+    global api_full_log, api_short_log
 
     try:
-        log_file = open(g_assets_folder / 'log.txt',"w") 
+        api_full_log = open(g_assets_folder / 'api_full.log',"w") 
+        api_short_log = open(g_assets_folder / 'api_short.log',"w") 
 
         report_name = g_assets_folder / 'index.html'
         if 'atelier' in g_assets_folder.stem:
@@ -3059,6 +3070,9 @@ def rdc_main(controller):
 
         index_html = open(report_name,"w") 
         viz_generation(controller)
+
+        api_full_log.close()
+        api_short_log.close()
     except Exception as e:
         print(str(e))
 
