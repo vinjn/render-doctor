@@ -1999,7 +1999,9 @@ class Draw(Event):
         return True
 
     def isClear(self):
-        return self.name.find('Clear') != -1
+        return 'Clear' in self.name\
+            or 'Invalidate' in self.name \
+            or 'Discard' in self.name
 
     def isDispatch(self):
         return self.name.find('Dispatch') != -1
@@ -2459,6 +2461,7 @@ class Frame:
         totalInstances = 0
         totalCalls = 0
         totalVerts = 0
+        has_clear_state = False
         for p in self.passes:
 
             lastDraw = p.getLastDraw()
@@ -2489,6 +2492,8 @@ class Frame:
                 m = 0
                 draws += len(s.draws)
                 for d in s.draws:
+                    if d.isClear():
+                        continue
                     c += len(d.draw_desc.events)
                     if d.draw_desc.numInstances > 1:
                         i += d.draw_desc.numInstances
@@ -2514,7 +2519,10 @@ class Frame:
                 time += m
                 calls += c
                 verts += v
-                states += 1
+                if s.getName() is not 'Clear':
+                    # Clear is not a State..
+                    has_clear_state = True
+                    states += 1
                 instances += i
 
             if states > 1:
@@ -2558,8 +2566,13 @@ class Frame:
                     
             overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
             (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, markersSummary, drawsSummary, instancesSummary, vertsSummary, self.getImageLinkOrNothing(z_filename), c_info))
+        
+        uniqueStateCounter = len(uniqueStateCounters)
+        if has_clear_state:
+            # remove "Clear" state
+            uniqueStateCounter -= 1
         overviewText = ('%s|%s|%s|''|%s|%s|%s|%s|%s\n' % 
-        ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, len(uniqueStateCounters)), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, pretty_number(totalVerts), '', '')) + overviewText
+        ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, pretty_number(totalVerts), '', '')) + overviewText
 
         markdown.write(overviewText)
 
