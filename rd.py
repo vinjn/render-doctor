@@ -2237,10 +2237,16 @@ class Draw(Event):
 
     def writeTextureMarkdown(self, markdown, controller, caption_suffix, resource_id, texture_file_name):
         res_info = get_texture_info(controller, resource_id)
+        depth_info = ''
+        arraysize_info = ''
+        mips_info = ''
+        if res_info.depth > 1:
+            depth_info = 'x%d' % res_info.depth
+        if res_info.arraysize > 1:
+            arraysize_info = '[%d]' % res_info.arraysize
         if res_info.mips > 1:
-            res_info_text = '(%dX%d %d mips %s)' % (res_info.width, res_info.height, res_info.mips, rd.ResourceFormat(res_info.format).Name() )
-        else:
-            res_info_text = '(%dX%d %s)' % (res_info.width, res_info.height, rd.ResourceFormat(res_info.format).Name() )
+            mips_info = '%d mips ' % res_info.mips
+        res_info_text = '(%dX%d%s%s %s%s)' % (res_info.width, res_info.height, depth_info, arraysize_info, mips_info, rd.ResourceFormat(res_info.format).Name() )
 
         # enum class ResourceFormatType
         # rdcstr ResourceFormatName(const ResourceFormat &fmt)
