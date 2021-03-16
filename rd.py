@@ -45,7 +45,6 @@ WRITE_PIPELINE = True
 WRITE_COLOR_BUFFER = True
 WRITE_TEXTURE = True
 WRITE_DEPTH_BUFFER = True
-WRITE_FAKE_PASSES = False # disabled since I dont like how rdc forms passes
 WRITE_PSO_DAG = False
 #######################################
 ### Config End
@@ -1932,10 +1931,7 @@ class Event:
         self.name = event_type.name
 
         if self.name.find('Draw') != -1 \
-            or self.name.find('Dispatch') != -1 \
-            or self.name.find('glDraw') != -1 \
-            or self.name.find('glMultiDraw') != -1 \
-            or self.name.find('glDispatch') != -1:
+            or self.name.find('Dispatch') != -1:
             g_is_binding_fbo = False
         else:        
             log_file.write('event_%04d %s\n' % (self.event_id, self.name))
@@ -2001,12 +1997,25 @@ class Draw(Event):
                 return False
 
         return True
-        
+
+    def isClear(self):
+        return self.name.find('Clear') != -1
+
     def isDispatch(self):
         return self.name.find('Dispatch') != -1
 
     def collectPipeline(self, controller):
         if not WRITE_PIPELINE:
+            return
+
+        if self.isClear():
+            self.pso_key = 'Clear'
+
+            if self.pso_key != State.current.getName():
+                # detects a PSO change
+                # TODO: this is too ugly
+                # TODO: this is double double ugly
+                Pass.current.addState(self)
             return
 
         global log_file
@@ -2120,8 +2129,6 @@ class Draw(Event):
                     shader_name = short_shader_name
                 self.shader_names[stage] = shader_name
                 self.short_shader_names[stage] = short_shader_name
-            else:
-                self.program_name = self.marker
 
             if refl:
                 if API_TYPE == rd.GraphicsAPI.OpenGL and WRITE_CONST_BUFFER:
@@ -2303,7 +2310,7 @@ class Draw(Event):
 
             # texture section
             markdown.write('\n\n--------\n\n')
-            if WRITE_TEXTURE:
+            if not self.isClear() and WRITE_TEXTURE:
                 for idx, resource_id in enumerate(self.textures):
                     if not resource_id or resource_id == rd.ResourceId.Null():
                         continue
@@ -2834,7 +2841,11 @@ def visit_draw(controller, draw, level = 1):
             new_event = Event(controller, ev, level+1)
             State.current.addEvent(new_event)
 
-        if  draw.flags & rd.DrawFlags.Drawcall or draw.flags & rd.DrawFlags.Dispatch or draw.flags & rd.DrawFlags.MultiDraw:
+        if  draw.flags & rd.DrawFlags.Drawcall \
+            or draw.flags & rd.DrawFlags.Dispatch \
+            or draw.flags & rd.DrawFlags.MultiDraw \
+            or draw.flags & rd.DrawFlags.Clear \
+            or draw.flags & rd.DrawFlags.Copy:
             new_draw = Draw(controller, draw, level)
 
             if g_next_draw_will_add_state:
@@ -2888,62 +2899,6 @@ def get_resource_name(controller, resource_id):
 
     return "Res_" + int(resource_id)
 
-def WRITE_FAKE_passes(controller, draw): # disabled since I dont like how rdc forms passes
-    # Counter for which pass we're in
-    passnum = 0
-    # Counter for how many draws are in the pass
-    passcontents = 0
-    # Whether we've started seeing draws in the pass - i.e. we're past any
-    # starting clear calls that may be batched together
-    inpass = False
-
-    markdown.write("# Passes\n")
-    markdown.write("- Pass #%d\n - starts with %d: %s\n" % (passnum, draw.eventId, draw.name))
-
-    while draw != None:
-        # When we encounter a clear
-        if draw.flags & rd.DrawFlags.Clear:
-            if inpass:
-                markdown.write(" - contained %d draws\n" % (passcontents))
-                passnum += 1
-                markdown.write("- Pass #%d\n - starts with %d: %s\n" % (passnum, draw.eventId, draw.name))
-                passcontents = 0
-                inpass = False
-        else:
-            passcontents += 1
-            inpass = True
-
-        if False:
-            if draw.flags & rd.DrawFlags.Clear: markdown.write("Clear ")
-            if draw.flags & rd.DrawFlags.Drawcall: markdown.write("Drawcall ")
-            if draw.flags & rd.DrawFlags.Dispatch: markdown.write("Dispatch ")
-            if draw.flags & rd.DrawFlags.CmdList: markdown.write("CmdList ")
-            if draw.flags & rd.DrawFlags.SetMarker: markdown.write("SetMarker ")
-            if draw.flags & rd.DrawFlags.PushMarker: markdown.write("PushMarker ")
-            if draw.flags & rd.DrawFlags.PopMarker: markdown.write("PopMarker ")
-            if draw.flags & rd.DrawFlags.Present: markdown.write("Present ")
-            if draw.flags & rd.DrawFlags.MultiDraw: markdown.write("MultiDraw ")
-            if draw.flags & rd.DrawFlags.Copy: markdown.write("Copy ")
-            if draw.flags & rd.DrawFlags.Resolve: markdown.write("Resolve ")
-            if draw.flags & rd.DrawFlags.GenMips: markdown.write("GenMips ")
-            if draw.flags & rd.DrawFlags.PassBoundary: markdown.write("PassBoundary ")
-
-            if draw.flags & rd.DrawFlags.Indexed: markdown.write("Indexed ")
-            if draw.flags & rd.DrawFlags.Instanced: markdown.write("Instanced ")
-            if draw.flags & rd.DrawFlags.Auto: markdown.write("Auto ")
-            if draw.flags & rd.DrawFlags.Indirect: markdown.write("Indirect ")
-            if draw.flags & rd.DrawFlags.ClearColor: markdown.write("ClearColor ")
-            if draw.flags & rd.DrawFlags.ClearDepthStencil: markdown.write("ClearDepthStencil ")
-            if draw.flags & rd.DrawFlags.BeginPass: markdown.write("BeginPass ")
-            if draw.flags & rd.DrawFlags.EndPass: markdown.write("EndPass ")
-            if draw.flags & rd.DrawFlags.APICalls: markdown.write("APICalls ")
-
-        # Advance to the next drawcall
-        draw = draw.next
-
-    if inpass:
-        markdown.write(" - contained %d draws\n" % (passcontents))
-
 def raw_data_generation(controller):
     print('^raw_data_generation')
     # Start iterating from the first real draw as a child of markers
@@ -2958,9 +2913,6 @@ def raw_data_generation(controller):
 
     while len(draw.children) > 0:
         draw = draw.children[0]
-
-    if WRITE_FAKE_PASSES: # disabled since I dont like how rdc forms passes
-        WRITE_FAKE_passes(controller, draw) # disabled since I dont like how rdc forms passes
 
     # Iterate over all of the root drawcalls
     for d in draws:
