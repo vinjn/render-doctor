@@ -2810,8 +2810,11 @@ def get_expanded_marker_name():
 def get_marker_name():
     if len(g_markers) > 0:
         name = g_markers[-1]
+        if len(g_markers) > 1 and name in ['Shadows.Draw', 'ShadowLoopNewBatcher.Draw', 'RenderLoop.Draw', 'RenderLoopNewBatcher.Draw']:
+            # to make Unity reports prettier
+            name = g_markers[-2]
         if len(name) > 30:
-         name = name[0:27] + '...'
+            name = name[0:27] + '...'
         return name
     return ''
 
