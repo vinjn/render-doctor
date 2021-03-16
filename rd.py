@@ -2102,7 +2102,12 @@ class Draw(Event):
                     program_name = get_resource_name(controller, p.pipelineResourceId)
                     program_name = program_name.replace('Pipeline', 'pso')
                     short_shader_name = get_resource_name(controller, shader_id)
-                    shader_name = program_name + '__' + short_shader_name                                      
+                    # .replace('Shader_Module', 'shader')
+                    if 'Shader_Module' in short_shader_name:
+                        shader_name = program_name + '__' + ShaderStage(stage).name
+                    else:
+                        program_name = short_shader_name 
+                        shader_name = short_shader_name + '__' + ShaderStage(stage).name
                 else:
                     short_shader_name = get_resource_name(controller, shader_id)
                     short_shader_name = short_shader_name.replace('Vertex_Shader', 'vs').replace('Pixel_Shader', 'ps').replace('Compute_Shader', 'cs').replace('Shader_Module', 'shader').replace('Geometry_Shader', 'gs')
