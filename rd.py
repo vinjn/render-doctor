@@ -2350,45 +2350,6 @@ class Draw(Event):
         markdown.write('\n\n')
         # TODO: add UAV / image etc
 
-    def exportTexture(self, controller, resource_id, file_name):
-        global g_assets_folder
-
-        file_path = g_assets_folder / file_name
-        if file_path.exists():
-            return
-
-        file_name = str(file_path)
-        res_info = get_texture_info(controller, resource_id)
-
-        texsave = rd.TextureSave()
-        if True or res_info.mips == 1:
-            texsave.alpha = rd.AlphaMapping.Discard
-            texsave.destType = rd.FileType.JPG
-        else:
-            texsave.alpha = rd.AlphaMapping.Preserve
-            texsave.destType = rd.FileType.PNG
-
-        texsave.mip = 0
-        texsave.slice.sliceIndex = 0
-        texsave.resourceId = resource_id
-
-        print("Writing %s" % file_name)
-        controller.SaveTexture(texsave, file_name)
-
-        if not 'pyrenderdoc' in globals() and res_info.creationFlags & rd.TextureCategory.DepthTarget:
-            # equalizeHist
-            try:
-                import cv2
-                import numpy as np
-            except ImportError as error:
-                return
-
-            z_rgb = cv2.imread(file_name)
-            z_r = z_rgb[:, :, 2]
-            equ = cv2.equalizeHist(z_r)
-            # res = np.hstack((z_r,equ)) #stacking images side-by-side
-            cv2.imwrite(file_name, equ)
-
     def exportResources(self, controller):
         if not WRITE_COLOR_BUFFER and not WRITE_DEPTH_BUFFER and not WRITE_TEXTURE:
             return
@@ -2397,7 +2358,8 @@ class Draw(Event):
             # on Android devices, Vulkan dispatch calls will likely crash renderdoc, so we skip them
             return
 
-        controller.SetFrameEvent(self.event_id, False)
+        if WRITE_COLOR_BUFFER or WRITE_DEPTH_BUFFER:
+            controller.SetFrameEvent(self.event_id, False)
 
         # WRITE textures
         if WRITE_TEXTURE:
@@ -2406,7 +2368,7 @@ class Draw(Event):
                     continue
                 resource_name = get_resource_name(controller, resource_id)
                 file_name = get_resource_filename(resource_name, IMG_EXT)
-                self.exportTexture(controller, resource_id, file_name)
+                exportTexture(controller, resource_id, file_name)
                 
         # WRITE render targtes (aka outputs)
         if WRITE_COLOR_BUFFER:
@@ -2415,7 +2377,7 @@ class Draw(Event):
                     resource_name = get_resource_name(controller, resource_id)
                     file_name = get_resource_filename('%s--%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
                     if WRITE_COLOR_BUFFER:
-                        self.exportTexture(controller, resource_id, file_name)
+                        exportTexture(controller, resource_id, file_name)
 
         # depth
         if WRITE_DEPTH_BUFFER and self.depth_buffer:
@@ -2424,7 +2386,7 @@ class Draw(Event):
                 resource_name = get_resource_name(controller, resource_id)
                 file_name = get_resource_filename('%s--%04d_z' % (resource_name, self.draw_id), IMG_EXT)
                 if not Path(file_name).exists():
-                    self.exportTexture(controller, resource_id, file_name)
+                    exportTexture(controller, resource_id, file_name)
 
     draw_id = None
     draw_desc = None # struct DrawcallDescription
@@ -2432,6 +2394,45 @@ class Draw(Event):
     pso_key = None
     color_buffers = None
     depth_buffer = None
+
+def exportTexture(controller, resource_id, file_name):
+    global g_assets_folder
+
+    file_path = g_assets_folder / file_name
+    if file_path.exists():
+        return
+
+    file_name = str(file_path)
+    res_info = get_texture_info(controller, resource_id)
+
+    texsave = rd.TextureSave()
+    if True or res_info.mips == 1:
+        texsave.alpha = rd.AlphaMapping.Discard
+        texsave.destType = rd.FileType.JPG
+    else:
+        texsave.alpha = rd.AlphaMapping.Preserve
+        texsave.destType = rd.FileType.PNG
+
+    texsave.mip = 0
+    texsave.slice.sliceIndex = 0
+    texsave.resourceId = resource_id
+
+    print("Writing %s" % file_name)
+    controller.SaveTexture(texsave, file_name)
+
+    if not 'pyrenderdoc' in globals() and res_info.creationFlags & rd.TextureCategory.DepthTarget:
+        # equalizeHist
+        try:
+            import cv2
+            import numpy as np
+        except ImportError as error:
+            return
+
+        z_rgb = cv2.imread(file_name)
+        z_r = z_rgb[:, :, 2]
+        equ = cv2.equalizeHist(z_r)
+        # res = np.hstack((z_r,equ)) #stacking images side-by-side
+        cv2.imwrite(file_name, equ)
 
 def pretty_number(num):
     if num < 1e3:
@@ -2478,8 +2479,9 @@ class Frame:
             res_info = get_texture_info(controller, resource_id)
             if res_info.creationFlags != rd.TextureCategory.ShaderRead:
                 continue
-            resource_name = get_resource_name(controller, resource_id)
-            file_name = get_resource_filename(resource_name, IMG_EXT)            
+            resource_name = get_resource_name(controller, resource_id, False)
+            file_name = get_resource_filename(get_resource_name(controller, resource_id), IMG_EXT)
+            exportTexture(controller, resource_id, file_name)
             markdown.write('%s|%s|%d|%d|%d|%d|%d|%s|%s\n' % (
                 resource_name,
                 rd.TextureType(res_info.type),
@@ -2969,14 +2971,16 @@ def get_texture_info(controller, resource_id):
     
     return None
 
-def get_resource_name(controller, resource_id):
+def get_resource_name(controller, resource_id, get_safe_name = True):
     if resource_id == rd.ResourceId.Null():
         return "NULL"
 
     resources = controller.GetResources()
     for res in resources:
         if resource_id == res.resourceId:
-            return getSafeName(res.name)
+            if get_safe_name:
+                return getSafeName(res.name)
+            return res.name
 
     return "Res_" + int(resource_id)
 
