@@ -53,7 +53,7 @@ WRITE_PSO_DAG = False
 api_full_log = None
 api_short_log = None
 API_TYPE = None # GraphicsAPI
-IMG_EXT = 'png'
+IMG_EXT = 'jpg'
 
 def getSafeName(name):
     return name.replace('/', '_').replace('#', '_').replace(' ', '_').replace('(', '_').replace(')', '_').replace('.', '_').replace(':', '_').replace('|', '_').replace('-', '_').replace('{', '_').replace('}', '_')
@@ -2208,6 +2208,7 @@ class Draw(Event):
                 if hasattr(pso, 'textures') and not self.textures:
                     for idx, texture in enumerate(pso.textures):
                         resource_id = texture.resourceId
+                        g_frame.textures.add(resource_id)
                         self.textures.append(resource_id)
                         if resource_id == rd.ResourceId.Null():
                             continue
@@ -2360,7 +2361,7 @@ class Draw(Event):
         res_info = get_texture_info(controller, resource_id)
 
         texsave = rd.TextureSave()
-        if res_info.mips == 1:
+        if True or res_info.mips == 1:
             texsave.alpha = rd.AlphaMapping.Discard
             texsave.destType = rd.FileType.JPG
         else:
@@ -2445,6 +2446,7 @@ class Frame:
     # 
     def __init__(self):
         self.passes = []
+        self.textures = set()
 
         self.addPass()
         self.stateNameDict = defaultdict(int)
@@ -2465,8 +2467,33 @@ class Frame:
 
         return '![](%s border="2" width="%s")' % (filename, width)
 
-    def writeFrameOverview(self, markdown, controller):
+    def writeResourceOverview(self, markdown, controller):
+        markdown.write('# Resource Overview\n')
 
+        markdown.write('name|type|width|height|depth|arraysize|mips|format|preview\n')
+        markdown.write('----|----|-----|------|-----|---------|----|------|-------\n')
+        for resource_id in g_frame.textures:
+            if not resource_id or resource_id == rd.ResourceId.Null():
+                continue
+            res_info = get_texture_info(controller, resource_id)
+            if res_info.creationFlags != rd.TextureCategory.ShaderRead:
+                continue
+            resource_name = get_resource_name(controller, resource_id)
+            file_name = get_resource_filename(resource_name, IMG_EXT)            
+            markdown.write('%s|%s|%d|%d|%d|%d|%d|%s|%s\n' % (
+                resource_name,
+                rd.TextureType(res_info.type),
+                res_info.width,
+                res_info.height,
+                res_info.depth,
+                res_info.arraysize,
+                res_info.mips,
+                rd.ResourceFormat(res_info.format).Name(),
+                '![](%s class="lazyload" data-src="%s" width="%s")' % ('../src/logo.png', file_name, '20%')
+            ))
+
+
+    def writeFrameOverview(self, markdown, controller):
         summary_csv = open(g_assets_folder / 'summary.csv',"w") 
 
         markdown.write('# Frame Overview\n')
@@ -2610,8 +2637,9 @@ class Frame:
             uniqueStateCounter -= 1            
         overviewText = ('%s|%s|%s|''|[%s](api_short.log)|%s|%s|%s|%s\n' % 
         ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, pretty_number(totalVerts), '', '')) + overviewText
-
+        
         markdown.write(overviewText)
+        markdown.write('\n')
 
     def writeBindStats(self, markdown, label, item):
         # TODO: add redundants
@@ -2761,6 +2789,7 @@ class Frame:
         markdown.write("**render-doctor %s**\n\n" % (rdc_file))
 
         self.writeFrameOverview(markdown, controller)
+        self.writeResourceOverview(markdown, controller)
         self.writeStats(markdown, controller)
 
         markdown.write('\n--------\n')
