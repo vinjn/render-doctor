@@ -2449,11 +2449,11 @@ class Frame:
         self.passes.append(Pass())
         Pass.current = self.passes[-1]
 
-    def getImageLinkOrNothing(self, filename):
+    def getImageLinkOrNothing(self, filename, width='50%'):
         if not filename:
             return ''
 
-        return '![](%s border="2" width="%s")' % (filename, '50%')
+        return '![](%s border="2" width="%s")' % (filename, width)
 
     def writeFrameOverview(self, markdown, controller):
 
@@ -2576,7 +2576,12 @@ class Frame:
                         z_filename = get_resource_filename('%s--%04d_z' % (resource_name, lastDraw.draw_id), IMG_EXT)
 
                 for c in c_filenames:
-                    c_info += self.getImageLinkOrNothing(c)
+                    if 'Bloom' in statesSummary or 'bloom' in statesSummary or 'BLOOM' in statesSummary \
+                        or 'Bloom' in markersSummary or 'bloom' in markersSummary or 'BLOOM' in markersSummary:
+                        # Save space for Bloom passes
+                        c_info += self.getImageLinkOrNothing(c, '10%')
+                    else:
+                        c_info += self.getImageLinkOrNothing(c)
                     
             overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
             (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, markersSummary, drawsSummary, instancesSummary, vertsSummary, self.getImageLinkOrNothing(z_filename), c_info))
