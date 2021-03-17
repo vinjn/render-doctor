@@ -2007,6 +2007,9 @@ class Draw(Event):
             or 'Invalidate' in self.name \
             or 'Discard' in self.name
 
+    def isCopy(self):
+        return 'Copy' in self.name
+
     def isDispatch(self):
         return self.name.find('Dispatch') != -1
 
@@ -2021,6 +2024,13 @@ class Draw(Event):
                 # detects a PSO change
                 # TODO: this is too ugly
                 # TODO: this is double double ugly
+                Pass.current.addState(self)
+            return
+
+        if self.isCopy():
+            self.pso_key = 'Copy'
+
+            if self.pso_key != State.current.getName():
                 Pass.current.addState(self)
             return
 
@@ -2326,7 +2336,7 @@ class Draw(Event):
 
             # texture section
             markdown.write('\n\n--------\n\n')
-            if not self.isClear() and WRITE_TEXTURE:
+            if not self.isClear() and not self.isCopy() and WRITE_TEXTURE:
                 for idx, resource_id in enumerate(self.textures):
                     if not resource_id or resource_id == rd.ResourceId.Null():
                         continue
@@ -2476,6 +2486,7 @@ class Frame:
         totalCalls = 0
         totalVerts = 0
         has_clear_state = False
+        has_copy_state = False
         for p in self.passes:
 
             lastDraw = p.getLastDraw()
@@ -2506,7 +2517,7 @@ class Frame:
                 m = 0
                 draws += len(s.draws)
                 for d in s.draws:
-                    if d.isClear():
+                    if d.isClear() or d.isCopy():
                         continue
                     c += len(d.draw_desc.events)
                     if d.draw_desc.numInstances > 1:
@@ -2533,9 +2544,13 @@ class Frame:
                 time += m
                 calls += c
                 verts += v
-                if s.getName() is not 'Clear':
-                    # Clear is not a State..
+                if s.getName() is 'Clear':
+                    # Clear is not a "correct" State..
                     has_clear_state = True
+                elif s.getName() is 'Copy':
+                    # Copy is not a "correct" State..
+                    has_copy_state = True
+                else:
                     states += 1
                 instances += i
 
@@ -2590,6 +2605,9 @@ class Frame:
         if has_clear_state:
             # remove "Clear" state
             uniqueStateCounter -= 1
+        if has_copy_state:
+            # remove "Copy" state
+            uniqueStateCounter -= 1            
         overviewText = ('%s|%s|%s|''|[%s](api_short.log)|%s|%s|%s|%s\n' % 
         ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, pretty_number(totalVerts), '', '')) + overviewText
 
@@ -2876,7 +2894,8 @@ def visit_draw(controller, draw, level = 0):
         if  draw.flags & rd.DrawFlags.Drawcall \
             or draw.flags & rd.DrawFlags.Dispatch \
             or draw.flags & rd.DrawFlags.MultiDraw \
-            or draw.flags & rd.DrawFlags.Clear:
+            or draw.flags & rd.DrawFlags.Clear \
+            or draw.flags & rd.DrawFlags.Copy:
             new_draw = Draw(controller, draw, level)
 
             if g_next_draw_will_add_state:
