@@ -1981,7 +1981,7 @@ class Draw(Event):
         self.gpu_duration = 0
         if self.event_id in g_draw_durations:
             self.gpu_duration = g_draw_durations[self.event_id]
-            if math.isnan(self.gpu_duration):
+            if math.isnan(self.gpu_duration) or self.gpu_duration < 0:
                 self.gpu_duration = 0
 
         for output in draw.outputs:
@@ -2871,8 +2871,7 @@ def visit_draw(controller, draw, level = 0):
         if  draw.flags & rd.DrawFlags.Drawcall \
             or draw.flags & rd.DrawFlags.Dispatch \
             or draw.flags & rd.DrawFlags.MultiDraw \
-            or draw.flags & rd.DrawFlags.Clear \
-            or draw.flags & rd.DrawFlags.Copy:
+            or draw.flags & rd.DrawFlags.Clear:
             new_draw = Draw(controller, draw, level)
 
             if g_next_draw_will_add_state:
