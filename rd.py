@@ -2206,12 +2206,19 @@ class Draw(Event):
 
                 # TODO: deal with other resources, (atomicBuffers, uniformBuffers, shaderStorageBuffers, images, transformFeedback etc)
                 if hasattr(pso, 'textures') and not self.textures:
-                    for idx, texture in enumerate(pso.textures):
-                        resource_id = texture.resourceId
-                        g_frame.textures.add(resource_id)
-                        self.textures.append(resource_id)
+                    for idx, sampler in enumerate(pso.samplers):
+                        # TODO: why is sampler always zero?
+                        resource_id = sampler.resourceId
                         if resource_id == rd.ResourceId.Null():
                             continue
+                        print(sampler.minLOD)
+
+                    for idx, texture in enumerate(pso.textures):
+                        resource_id = texture.resourceId
+                        if resource_id == rd.ResourceId.Null():
+                            continue
+                        g_frame.textures.add(resource_id)
+                        self.textures.append(resource_id)
         self.pso_key = program_name
 
         if self.pso_key != State.current.getName():
@@ -2478,7 +2485,7 @@ class Frame:
 
         class TextureLog:
             def __init__(self, controller, resource_id):
-                self.name = get_resource_name(controller, resource_id)
+                self.name = get_resource_name(controller, resource_id, False)
                 self.info = get_texture_info(controller, resource_id)
                 self.format = rd.ResourceFormat(self.info.format).Name()
 
@@ -2488,11 +2495,11 @@ class Frame:
                     if 'R16G16B16A16_FLOAT' in self.format:
                         self.tips.append('64bits_per_pixel')
                 name_lower = self.name.lower()
-                if 'hud' in name_lower or 'sactx' in name_lower or 'font' in name_lower or 'T_Fx' in name_lower:
+                if 'hud' in name_lower or 'sactx' in name_lower or 'font' in name_lower or 't_fx' in name_lower or 'tex_eft' in name_lower:
                     # white-list, "2D" textures, used as HUD, UI etc.
                     pass
                 elif self.info.creationFlags == rd.TextureCategory.ShaderRead:
-                    if self.info.width > 512 or self.info.height > 512:
+                    if 'lightmap' not in name_lower and (self.info.width > 512 or self.info.height > 512):
                         self.tips.append('large_dimension')
                     if self.info.width > 256 and self.info.height > 256:
                         if self.info.mips == 1:
