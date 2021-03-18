@@ -2324,7 +2324,7 @@ class Draw(Event):
                     resource_name = get_resource_name(controller, resource_id)
                     # TODO: ugly
                     file_name = get_resource_filename('%s--%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
-                    self.writeTextureMarkdown(markdown, controller, 'c%s: %s' % (idx, resource_name), resource_id, file_name)
+                    self.writeTextureMarkdown(markdown, controller, 'c%d: %s' % (idx, resource_name), resource_id, file_name)
             
             # depth buffer section
             if WRITE_DEPTH_BUFFER:
@@ -2469,28 +2469,62 @@ class Frame:
         return '![](%s border="2" width="%s")' % (filename, width)
 
     def writeResourceOverview(self, markdown, controller):
-        markdown.write('# Resource Overview\n')
 
-        markdown.write('name|type|width|height|depth|arraysize|mips|format|preview\n')
-        markdown.write('----|----|-----|------|-----|---------|----|------|-------\n')
+        texture_array = []
+
+        class TextureLog:
+            def __init__(self, controller, resource_id):
+                self.name = get_resource_name(controller, resource_id)
+                self.info = get_texture_info(controller, resource_id)
+                self.format = rd.ResourceFormat(self.info.format).Name()
+
+                self.tips = []
+                # doctor jobs...
+                if self.info.creationFlags == rd.TextureCategory.ColorTarget:
+                    if 'R16G16B16A16_FLOAT' in self.format: self.tips.append('64bits_per_pixel')
+                if self.info.creationFlags == rd.TextureCategory.ShaderRead:
+                    if self.info.width > 512: self.tips.append('width > 512')
+                    if self.info.height > 512: self.tips.append('height > 512')
+                    if self.info.mips == 1: self.tips.append('not_using_mipmaps')
+                    if not self.info.format.BlockFormat(): self.tips.append('uncompressed_format')
+                    # if tex_info.creationFlags != rd.TextureCategory.ShaderRead:
+                    # continue
+
         for resource_id in g_frame.textures:
             if not resource_id or resource_id == rd.ResourceId.Null():
                 continue
-            res_info = get_texture_info(controller, resource_id)
-            if res_info.creationFlags != rd.TextureCategory.ShaderRead:
-                continue
-            resource_name = get_resource_name(controller, resource_id, False)
-            file_name = get_resource_filename(get_resource_name(controller, resource_id), IMG_EXT)
-            exportTexture(controller, resource_id, file_name)
-            markdown.write('%s|%s|%d|%d|%d|%d|%d|%s|%s\n' % (
-                resource_name,
-                rd.TextureType(res_info.type),
-                res_info.width,
-                res_info.height,
-                res_info.depth,
-                res_info.arraysize,
-                res_info.mips,
-                rd.ResourceFormat(res_info.format).Name(),
+            texture_array.append(TextureLog(controller, resource_id))
+
+        def getName(elem):
+            return elem.name
+
+        def getTipsLength(elem):
+            return len(elem.tips)
+
+        texture_array = sorted(texture_array, key=getTipsLength, reverse=True)
+
+        markdown.write('# Resource Overview\n')
+
+        markdown.write('name|type|flags|width|height|depth|arraysize|mips|format|tips|preview\n')
+        markdown.write('----|----|-----|-----|------|-----|---------|----|------|----|------\n')
+        
+        for tex_pair in texture_array:
+            file_name = get_resource_filename(getSafeName(tex_pair.name), IMG_EXT)
+            tex_info = tex_pair.info
+            exportTexture(controller, tex_info.resourceId, file_name)
+            texType = '%s' % rd.TextureType(tex_info.type)
+            category = '%s' % rd.TextureCategory(tex_info.creationFlags)
+            markdown.write('%s|%s|%s|%d|%d|%d|%d|%d|%s|%s|%s\n' % (
+                tex_pair.name,
+                texType.replace('TextureType.', ''),
+                category.replace('TextureCategory.', '').replace('|','+'),
+                tex_info.width,
+                tex_info.height,
+                tex_info.depth,
+                tex_info.arraysize,
+                tex_info.mips,
+                tex_pair.format,
+                '<br>'.join(tex_pair.tips),
                 '![](%s class="lazyload" data-src="%s" width="%s")' % ('../src/logo.png', file_name, '20%')
             ))
 
