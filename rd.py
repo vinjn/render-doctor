@@ -2470,6 +2470,10 @@ class Frame:
 
     def writeResourceOverview(self, markdown, controller):
 
+        if API_TYPE != rd.GraphicsAPI.OpenGL:
+            # TODO: support other formats
+            return
+
         texture_array = []
 
         class TextureLog:
@@ -2481,12 +2485,28 @@ class Frame:
                 self.tips = []
                 # doctor jobs...
                 if self.info.creationFlags == rd.TextureCategory.ColorTarget:
-                    if 'R16G16B16A16_FLOAT' in self.format: self.tips.append('64bits_per_pixel')
-                if self.info.creationFlags == rd.TextureCategory.ShaderRead:
-                    if self.info.width > 512: self.tips.append('width > 512')
-                    if self.info.height > 512: self.tips.append('height > 512')
-                    if self.info.mips == 1: self.tips.append('not_using_mipmaps')
-                    if not self.info.format.BlockFormat(): self.tips.append('uncompressed_format')
+                    if 'R16G16B16A16_FLOAT' in self.format:
+                        self.tips.append('64bits_per_pixel')
+                name_lower = self.name.lower()
+                if 'hud' in name_lower or 'sactx' in name_lower or 'font' in name_lower or 'T_Fx' in name_lower:
+                    # white-list, "2D" textures, used as HUD, UI etc.
+                    pass
+                elif self.info.creationFlags == rd.TextureCategory.ShaderRead:
+                    if self.info.width > 512 or self.info.height > 512:
+                        self.tips.append('large_dimension')
+                    if self.info.width > 256 and self.info.height > 256:
+                        if self.info.mips == 1:
+                            self.tips.append('no_mipmap')
+                        if 'BC' not in self.format and\
+                            'ETC' not in self.format and\
+                            'EAC' not in self.format and\
+                            'ASTC' not in self.format and\
+                            'PVRTC' not in self.format:
+                            self.tips.append('uncompressed_format')
+                        if not math.log(self.info.width, 2).is_integer() or\
+                            not math.log(self.info.height, 2).is_integer():
+                            self.tips.append('not_power_of_two')
+
                     # if tex_info.creationFlags != rd.TextureCategory.ShaderRead:
                     # continue
 
@@ -2501,12 +2521,13 @@ class Frame:
         def getTipsLength(elem):
             return len(elem.tips)
 
+        texture_array = sorted(texture_array, key=getName)
         texture_array = sorted(texture_array, key=getTipsLength, reverse=True)
 
         markdown.write('# Resource Overview\n')
 
-        markdown.write('name|type|flags|width|height|depth|arraysize|mips|format|tips|preview\n')
-        markdown.write('----|----|-----|-----|------|-----|---------|----|------|----|------\n')
+        markdown.write('name|type|usage|dimension|mips|format|tips|preview\n')
+        markdown.write('----|----|-----|--------:|---:|------|----|------\n')
         
         for tex_pair in texture_array:
             file_name = get_resource_filename(getSafeName(tex_pair.name), IMG_EXT)
@@ -2514,14 +2535,11 @@ class Frame:
             exportTexture(controller, tex_info.resourceId, file_name)
             texType = '%s' % rd.TextureType(tex_info.type)
             category = '%s' % rd.TextureCategory(tex_info.creationFlags)
-            markdown.write('%s|%s|%s|%d|%d|%d|%d|%d|%s|%s|%s\n' % (
+            markdown.write('%s|%s|%s|%s|%d|%s|%s|%s\n' % (
                 tex_pair.name,
-                texType.replace('TextureType.', ''),
-                category.replace('TextureCategory.', '').replace('|','+'),
-                tex_info.width,
-                tex_info.height,
-                tex_info.depth,
-                tex_info.arraysize,
+                texType.replace('TextureType.Texture', ''),
+                category.replace('TextureCategory.', '').replace('ShaderRead','T').replace('ColorTarget','C').replace('DepthTarget','Z').replace('|',''),
+                '%dx%d' % (tex_info.width, tex_info.height),
                 tex_info.mips,
                 tex_pair.format,
                 '<br>'.join(tex_pair.tips),
