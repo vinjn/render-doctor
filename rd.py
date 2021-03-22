@@ -2597,7 +2597,7 @@ class Frame:
             verts = 0
             for s in p.states:
                 statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(controller).lower(), s.getUniqueName().lower())
-                drawsSummary += '[%d](%s.html)<br>' % (len(s.draws), s.getUniqueName().lower())
+                drawsSummary += '[%d](%s.html)<br>' % (len(s.draws), s.getUniqueName())
 
                 c = 0
                 v = 0
@@ -2696,7 +2696,7 @@ class Frame:
         if has_copy_state:
             # remove "Copy" state
             uniqueStateCounter -= 1            
-        overviewText = ('%s|%s|%s|''|[%s](api_short.log)|%s|%s|%s|%s\n' % 
+        overviewText = ('%s|%s|%s|''|[%s](api_short.txt)|%s|%s|%s|%s\n' % 
         ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, pretty_number(totalVerts), '', '')) + overviewText
         
         markdown.write(overviewText)
@@ -3177,8 +3177,8 @@ def rdc_main(controller):
     global api_full_log, api_short_log
 
     try:
-        api_full_log = open(g_assets_folder / 'api_full.log',"w") 
-        api_short_log = open(g_assets_folder / 'api_short.log',"w") 
+        api_full_log = open(g_assets_folder / 'api_full.txt',"w") 
+        api_short_log = open(g_assets_folder / 'api_short.txt',"w") 
 
         report_name = g_assets_folder / 'index.html'
         if 'atelier' in g_assets_folder.stem:
