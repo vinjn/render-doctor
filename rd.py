@@ -2501,7 +2501,7 @@ class Frame:
                 elif self.info.creationFlags == rd.TextureCategory.ShaderRead:
                     if 'lightmap' not in name_lower and (self.info.width > 512 or self.info.height > 512):
                         self.tips.append('large_dimension')
-                    if self.info.width > 256 and self.info.height > 256:
+                    if self.info.width >= 256 and self.info.height >= 256:
                         if self.info.mips == 1:
                             self.tips.append('no_mipmap')
                         if 'BC' not in self.format and\
