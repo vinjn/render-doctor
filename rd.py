@@ -40,7 +40,7 @@ import renderdoc as rd
 #######################################
 WRITE_DETALS = False
 WRITE_MALIOC = True
-WRITE_CONST_BUFFER = False
+WRITE_CONST_BUFFER = True
 WRITE_PIPELINE = True
 WRITE_COLOR_BUFFER = True
 WRITE_TEXTURE = True
@@ -1910,6 +1910,7 @@ class Event:
     def __init__(self, controller, ev, level = 0):
         global g_is_binding_fbo
         global api_full_log
+        global api_short_log
         global g_next_draw_will_add_state
 
         sdfile = controller.GetStructuredFile()
@@ -1942,6 +1943,7 @@ class Event:
                 event_type == D3D11Chunk.OMSetRenderTargetsAndUnorderedAccessViews:
                 if not g_is_binding_fbo:
                     # non fbo call -> fbo call, marks start of a new pass
+                    api_short_log.write('%se%04d %s\n' % ('    ' * level, self.event_id, self.name))
                     g_next_draw_will_add_state = True
                 g_is_binding_fbo = True
 
@@ -3090,7 +3092,7 @@ def printVar(v, indent = ''):
             valstr += indent + '  '
 
             for c in range(0, v.columns):
-                valstr += '%.3f ' % v.value.fv[r*v.columns + c]
+                valstr += '%.3f ' % v.value.f32v[r*v.columns + c]
 
             if r < v.rows-1:
                 valstr += "\n"
