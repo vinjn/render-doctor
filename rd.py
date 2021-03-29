@@ -1713,6 +1713,43 @@ mermaid_head = """
 
 rdc_file = '.rdc'
 
+class TextureDoctor:
+    def __init__(self, controller, resource_id):
+        self.name = get_resource_name(controller, resource_id, False)
+        self.info = get_texture_info(controller, resource_id)
+        self.format = rd.ResourceFormat(self.info.format).Name()
+
+        self.tips = []
+        # doctor jobs...
+        if self.info.creationFlags == rd.TextureCategory.ColorTarget:
+            if 'R16G16B16A16_FLOAT' in self.format:
+                self.tips.append('64bits_per_pixel')
+        name_lower = self.name.lower()
+        if 'hud' in name_lower or 'sactx' in name_lower or 'font' in name_lower or 't_fx' in name_lower or 'tex_eft' in name_lower:
+            # white-list, "2D" textures, used as HUD, UI etc.
+            pass
+        elif self.info.creationFlags == rd.TextureCategory.ShaderRead:
+            if 'lightmap' not in name_lower and (self.info.width > 512 or self.info.height > 512):
+                self.tips.append('large_dimension')
+            if self.info.width >= 256 and self.info.height >= 256:
+                if self.info.mips == 1:
+                    self.tips.append('no_mipmap')
+                if 'BC' not in self.format and\
+                    'ETC' not in self.format and\
+                    'EAC' not in self.format and\
+                    'ASTC' not in self.format and\
+                    'PVRTC' not in self.format:
+                    self.tips.append('uncompressed_format')
+                if not math.log(self.info.width, 2).is_integer() or\
+                    not math.log(self.info.height, 2).is_integer():
+                    self.tips.append('not_power_of_two')
+
+            # if tex_info.creationFlags != rd.TextureCategory.ShaderRead:
+            # continue
+
+class ShaderDoctor:
+    def __init__(self, controller, resource_id):
+        pass
 
 '''
 PPD (Pass - State - Draw) hierachy, there could be other hierachies, so I need to separate <derived data> from <raw data>
@@ -2150,7 +2187,7 @@ class Draw(Event):
 
             if refl:
                 if API_TYPE == rd.GraphicsAPI.OpenGL and WRITE_CONST_BUFFER:
-                    self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage)
+                    self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage, self.shader_names[stage], refl, program_name)
 
                     # const_buffer--%4d.html
                     resource_name = 'const_buffer--%04d' % (self.draw_id)
@@ -2462,6 +2499,7 @@ class Frame:
     def __init__(self):
         self.passes = []
         self.textures = set()
+        self.shaders = {}
 
         self.addPass()
         self.stateNameDict = defaultdict(int)
@@ -2482,6 +2520,23 @@ class Frame:
 
         return '![](%s border="2" width="%s")' % (filename, width)
 
+    def writeShaderOverview(self, markdown, controller):
+        markdown.write('# Shader Overview\n')
+        markdown.write('name|type|unused_uniforms\n')
+        markdown.write('----|----|--------------\n')
+
+        for k,v in g_frame.shaders.items():
+            unused_uniforms = ''
+            for uk in v['uniforms']:
+                uniform = v['uniforms'][uk]
+                if not uniform['used']:
+                    unused_uniforms += (uk + '<br>')
+
+            markdown.write('[%s](%s.html)|%s|%s\n' % (k, k, v['type'], 
+                                            unused_uniforms))
+
+        markdown.write('\n')
+
     def writeResourceOverview(self, markdown, controller):
 
         if API_TYPE != rd.GraphicsAPI.OpenGL:
@@ -2490,44 +2545,10 @@ class Frame:
 
         texture_array = []
 
-        class TextureLog:
-            def __init__(self, controller, resource_id):
-                self.name = get_resource_name(controller, resource_id, False)
-                self.info = get_texture_info(controller, resource_id)
-                self.format = rd.ResourceFormat(self.info.format).Name()
-
-                self.tips = []
-                # doctor jobs...
-                if self.info.creationFlags == rd.TextureCategory.ColorTarget:
-                    if 'R16G16B16A16_FLOAT' in self.format:
-                        self.tips.append('64bits_per_pixel')
-                name_lower = self.name.lower()
-                if 'hud' in name_lower or 'sactx' in name_lower or 'font' in name_lower or 't_fx' in name_lower or 'tex_eft' in name_lower:
-                    # white-list, "2D" textures, used as HUD, UI etc.
-                    pass
-                elif self.info.creationFlags == rd.TextureCategory.ShaderRead:
-                    if 'lightmap' not in name_lower and (self.info.width > 512 or self.info.height > 512):
-                        self.tips.append('large_dimension')
-                    if self.info.width >= 256 and self.info.height >= 256:
-                        if self.info.mips == 1:
-                            self.tips.append('no_mipmap')
-                        if 'BC' not in self.format and\
-                            'ETC' not in self.format and\
-                            'EAC' not in self.format and\
-                            'ASTC' not in self.format and\
-                            'PVRTC' not in self.format:
-                            self.tips.append('uncompressed_format')
-                        if not math.log(self.info.width, 2).is_integer() or\
-                            not math.log(self.info.height, 2).is_integer():
-                            self.tips.append('not_power_of_two')
-
-                    # if tex_info.creationFlags != rd.TextureCategory.ShaderRead:
-                    # continue
-
         for resource_id in g_frame.textures:
             if not resource_id or resource_id == rd.ResourceId.Null():
                 continue
-            texture_array.append(TextureLog(controller, resource_id))
+            texture_array.append(TextureDoctor(controller, resource_id))
 
         def getName(elem):
             return elem.name
@@ -2560,6 +2581,7 @@ class Frame:
                 '![](%s class="lazyload" data-src="%s" width="%s")' % ('../src/logo.png', file_name, '20%')
             ))
 
+        markdown.write('\n')
 
     def writeFrameOverview(self, markdown, controller):
         summary_csv = open(g_assets_folder / 'summary.csv',"w") 
@@ -2857,6 +2879,7 @@ class Frame:
         markdown.write("**render-doctor %s**\n\n" % (rdc_file))
 
         self.writeFrameOverview(markdown, controller)
+        self.writeShaderOverview(markdown, controller)
         self.writeResourceOverview(markdown, controller)
         self.writeStats(markdown, controller)
 
@@ -3089,12 +3112,17 @@ def generate_viz(controller):
     print('$generate_viz')
     print("%s\n" % (report_name))
 
-def print_var(v, indent = ''):
+def print_var(v, indent = '', shader_name = '', setup_shader_doctor = False):
+    # TODO: ugly
     if '[' in v.name or ']' in v.name:
         # v is a row of a matrix
         valstr = ''
         indent = ''
     else:
+        if setup_shader_doctor:
+            g_frame.shaders[shader_name]['uniforms'][v.name] = {
+                'used': False
+            }
         valstr = indent + v.name + "\n"
 
     if len(v.members) == 0:
@@ -3122,7 +3150,7 @@ def print_var(v, indent = ''):
 
     return valstr
 
-def get_cbuffer_contents(controller, stage):
+def get_cbuffer_contents(controller, stage, shader_name, refl, program_name):
     pipe = controller.GetPipelineState()
 
     contents = ''
@@ -3130,6 +3158,17 @@ def get_cbuffer_contents(controller, stage):
     pso = pipe.GetGraphicsPipelineObject()
     if stage == rd.ShaderStage.Compute:
         pso = pipe.GetComputePipelineObject()
+
+    shader = pipe.GetShader(stage)
+
+    setup_shader_doctor = False
+    if shader not in g_frame.shaders:
+        setup_shader_doctor = True
+        g_frame.shaders[shader_name] = {
+            'state': program_name,
+            'type': ShaderStage(stage).name,
+            'uniforms': {}
+        }
 
     for slot in range(0, 4):
         cb = pipe.GetConstantBuffer(stage, slot, 0)
@@ -3143,8 +3182,15 @@ def get_cbuffer_contents(controller, stage):
             break
 
         for v in cbufferVars:
-            contents += print_var(v)
+            contents += print_var(v, shader_name = shader_name, setup_shader_doctor = setup_shader_doctor)
         contents += '\n----------------------------------\n'
+
+    if setup_shader_doctor:
+        rawBytes = str(refl.rawBytes, 'utf-8')
+        for k,v in g_frame.shaders[shader_name]['uniforms'].items():
+            if rawBytes.count(k) > 1:
+                # uniform definition itself cost one occurence
+                v['used'] = True
 
     return contents
 
