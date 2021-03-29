@@ -17,7 +17,7 @@
 # C:\svn_pool\renderdoc\renderdoc\replay\replay_controller.h 
 
 # TODO
-# [] Add a json layer for raw_data_generation, separate raw_data and controller
+# [] Add a json layer for generate_raw_data, separate raw_data and controller
 # [] Add resource manager, and export to disk
 
 import os
@@ -2382,7 +2382,7 @@ class Draw(Event):
                     continue
                 resource_name = get_resource_name(controller, resource_id)
                 file_name = get_resource_filename(resource_name, IMG_EXT)
-                exportTexture(controller, resource_id, file_name)
+                export_texture(controller, resource_id, file_name)
                 
         # WRITE render targtes (aka outputs)
         if WRITE_COLOR_BUFFER:
@@ -2391,7 +2391,7 @@ class Draw(Event):
                     resource_name = get_resource_name(controller, resource_id)
                     file_name = get_resource_filename('%s--%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
                     if WRITE_COLOR_BUFFER:
-                        exportTexture(controller, resource_id, file_name)
+                        export_texture(controller, resource_id, file_name)
 
         # depth
         if WRITE_DEPTH_BUFFER and self.depth_buffer:
@@ -2400,7 +2400,7 @@ class Draw(Event):
                 resource_name = get_resource_name(controller, resource_id)
                 file_name = get_resource_filename('%s--%04d_z' % (resource_name, self.draw_id), IMG_EXT)
                 if not Path(file_name).exists():
-                    exportTexture(controller, resource_id, file_name)
+                    export_texture(controller, resource_id, file_name)
 
     draw_id = None
     draw_desc = None # struct DrawcallDescription
@@ -2409,7 +2409,7 @@ class Draw(Event):
     color_buffers = None
     depth_buffer = None
 
-def exportTexture(controller, resource_id, file_name):
+def export_texture(controller, resource_id, file_name):
     global g_assets_folder
 
     file_path = g_assets_folder / file_name
@@ -2546,7 +2546,7 @@ class Frame:
         for tex_pair in texture_array:
             file_name = get_resource_filename(getSafeName(tex_pair.name), IMG_EXT)
             tex_info = tex_pair.info
-            exportTexture(controller, tex_info.resourceId, file_name)
+            export_texture(controller, tex_info.resourceId, file_name)
             texType = '%s' % rd.TextureType(tex_info.type)
             category = '%s' % rd.TextureCategory(tex_info.creationFlags)
             markdown.write('%s|%s|%s|%s|%d|%s|%s|%s\n' % (
@@ -3050,8 +3050,8 @@ def get_resource_name(controller, resource_id, get_safe_name = True):
 
     return "Res_" + int(resource_id)
 
-def raw_data_generation(controller):
-    print('^raw_data_generation')
+def generate_raw_data(controller):
+    print('^generate_raw_data')
     # Start iterating from the first real draw as a child of markers
     # draw type = DrawcallDescription
     global API_TYPE
@@ -3069,24 +3069,24 @@ def raw_data_generation(controller):
     for d in draws:
         visit_draw(controller, d)
 
-    print('$raw_data_generation')
+    print('$generate_raw_data')
 
-def derived_data_generation(controller):
+def generate_derived_data(controller):
 
-    print('^derived_data_generation')
+    print('^generate_derived_data')
     
-    print('$derived_data_generation')
+    print('$generate_derived_data')
 
 
-def viz_generation(controller): 
-    print('^viz_generation')
+def generate_viz(controller): 
+    print('^generate_viz')
     g_frame.writeIndexHtml(index_html, controller)
 
     for p in g_frame.passes:
         p.writeDetailHtml(controller)
   
     g_frame.exportResources(controller)
-    print('$viz_generation')
+    print('$generate_viz')
     print("%s\n" % (report_name))
 
 def print_var(v, indent = ''):
@@ -3095,7 +3095,7 @@ def print_var(v, indent = ''):
         valstr = ''
         indent = ''
     else:
-        valstr = indent + v.name + ":\n"
+        valstr = indent + v.name + "\n"
 
     if len(v.members) == 0:
         # leaf node
@@ -3106,7 +3106,7 @@ def print_var(v, indent = ''):
                 if v.type == rd.VarType.Float:
                     valstr += '%.3f ' % v.value.f32v[r*v.columns + c]
                 elif v.type == rd.VarType.Double:
-                    valstr += '%.3g ' % v.value.f64v[r*v.columns + c]                    
+                    valstr += '%.3g ' % v.value.f64v[r*v.columns + c]
                 elif v.type == rd.VarType.SInt:
                     valstr += '%d ' % v.value.s32v[r*v.columns + c]
                 elif v.type == rd.VarType.UInt:
@@ -3181,11 +3181,11 @@ def rdc_main(controller):
             WRITE_TEXTURE = False
 
         fetch_gpu_counters(controller)
-        raw_data_generation(controller)
-        derived_data_generation(controller)
+        generate_raw_data(controller)
+        generate_derived_data(controller)
 
         index_html = open(report_name,"w") 
-        viz_generation(controller)
+        generate_viz(controller)
 
         api_full_log.close()
         api_short_log.close()
