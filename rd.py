@@ -3103,7 +3103,14 @@ def print_var(v, indent = ''):
             valstr += indent + '  '
 
             for c in range(0, v.columns):
-                valstr += '%.3f ' % v.value.f32v[r*v.columns + c]
+                if v.type == rd.VarType.Float:
+                    valstr += '%.3f ' % v.value.f32v[r*v.columns + c]
+                elif v.type == rd.VarType.Double:
+                    valstr += '%.3g ' % v.value.f64v[r*v.columns + c]                    
+                elif v.type == rd.VarType.SInt:
+                    valstr += '%d ' % v.value.s32v[r*v.columns + c]
+                elif v.type == rd.VarType.UInt:
+                    valstr += '%d ' % v.value.u32v[r*v.columns + c]
 
             if r < v.rows-1:
                 valstr += "\n"
@@ -3120,10 +3127,14 @@ def get_cbuffer_contents(controller, stage):
 
     contents = ''
 
+    pso = pipe.GetGraphicsPipelineObject()
+    if stage == rd.ShaderStage.Compute:
+        pso = pipe.GetComputePipelineObject()
+
     for slot in range(0, 4):
         cb = pipe.GetConstantBuffer(stage, slot, 0)
 
-        cbufferVars = controller.GetCBufferVariableContents(pipe.GetGraphicsPipelineObject(),
+        cbufferVars = controller.GetCBufferVariableContents(pso,
                                                             pipe.GetShader(stage),
                                                             pipe.GetShaderEntryPoint(stage), slot,
                                                             cb.resourceId, cb.byteOffset, cb.byteSize)
