@@ -1691,7 +1691,6 @@ g_draw_durations = {}
 
 # raw data
 g_events = []
-g_resources = {}
 
 markdeep_head = """
 <meta charset="utf-8" emacsmode="-*- markdown -*-">
@@ -2264,7 +2263,7 @@ class Draw(Event):
                         resource_id = sampler.resourceId
                         if resource_id == rd.ResourceId.Null():
                             continue
-                        print(sampler.minLOD)
+                        # print(sampler.minLOD)
 
                     for idx, texture in enumerate(pso.textures):
                         resource_id = texture.resourceId
@@ -2499,7 +2498,7 @@ class Frame:
     def __init__(self):
         self.passes = []
         self.textures = set()
-        self.shaders = {}
+        self.shaders = OrderedDict()
 
         self.addPass()
         self.stateNameDict = defaultdict(int)
