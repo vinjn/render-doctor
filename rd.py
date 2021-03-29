@@ -2151,6 +2151,20 @@ class Draw(Event):
             if refl:
                 if API_TYPE == rd.GraphicsAPI.OpenGL and WRITE_CONST_BUFFER:
                     self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage)
+
+                    # const_buffer--%4d.html
+                    resource_name = 'const_buffer--%04d' % (self.draw_id)
+                    file_name = get_resource_filename(resource_name, 'html')
+                    if not Path(file_name).exists():
+                        with open(g_assets_folder / file_name, 'w') as fp:
+                            fp.write(markdeep_head)
+                            for stage in range(0, rd.ShaderStage.Count):
+                                if self.shader_cb_contents[stage]:
+                                    fp.write('# %s\n' % (ShaderStage(stage).name)) # shader type head "VS", "FS" etc
+                                    fp.write('```glsl\n')
+                                    fp.write(self.shader_cb_contents[stage])
+                                    fp.write('\n```\n')
+                                    fp.write("\n\n")
                 if False:
                     # TODO: sadly ShaderBindpointMapping is always empty :(
                     mapping = shader.bindpointMapping # struct ShaderBindpointMapping
@@ -2311,15 +2325,6 @@ class Draw(Event):
         if WRITE_CONST_BUFFER:
             resource_name = 'const_buffer--%04d' % (self.draw_id)
             file_name = get_resource_filename(resource_name, 'html')
-            with open(g_assets_folder / file_name, 'w') as cb_contents_fp:
-                cb_contents_fp.write(markdeep_head)
-                for stage in range(0, rd.ShaderStage.Count):
-                    if self.shader_cb_contents[stage]:
-                        cb_contents_fp.write('# %s\n' % (ShaderStage(stage).name)) # shader type head "VS", "FS" etc
-                        cb_contents_fp.write('```glsl\n')
-                        cb_contents_fp.write(self.shader_cb_contents[stage])
-                        cb_contents_fp.write('\n```\n')
-                        cb_contents_fp.write("\n\n")
             markdown.write("%s: %s" % ('CB', link_to_file(resource_name, file_name)))
 
         markdown.write('\n\n')
@@ -3084,10 +3089,16 @@ def viz_generation(controller):
     print('$viz_generation')
     print("%s\n" % (report_name))
 
-def printVar(v, indent = ''):
-    valstr = indent + v.name + ":\n"
+def print_var(v, indent = ''):
+    if '[' in v.name or ']' in v.name:
+        # v is a row of a matrix
+        valstr = ''
+        indent = ''
+    else:
+        valstr = indent + v.name + ":\n"
 
     if len(v.members) == 0:
+        # leaf node
         for r in range(0, v.rows):
             valstr += indent + '  '
 
@@ -3098,62 +3109,33 @@ def printVar(v, indent = ''):
                 valstr += "\n"
 
     for v in v.members:
-        valstr += printVar(v, indent + '    ')
-        valstr += '\n'
+        valstr += print_var(v, indent + '    ')
 
     valstr += '\n'
 
     return valstr
 
-def get_cbuffer_contents(controller, shader_stage):
-    state = controller.GetPipelineState()
-
-    # For some APIs, it might be relevant to set the PSO id or entry point name
-    pipe = state.GetGraphicsPipelineObject()
-    entry = state.GetShaderEntryPoint(shader_stage)
-
-    # Get the pixel shader's reflection object
-    refl = state.GetShaderReflection(shader_stage)
-
-    cb = state.GetConstantBuffer(shader_stage, 0, 0)
-
-    cbufferVars = controller.GetCBufferVariableContents(pipe, refl.resourceId, entry, 0, cb.resourceId, 0, 0)
+def get_cbuffer_contents(controller, stage):
+    pipe = controller.GetPipelineState()
 
     contents = ''
-    for v in cbufferVars:
-        contents += printVar(v)
+
+    for slot in range(0, 4):
+        cb = pipe.GetConstantBuffer(stage, slot, 0)
+
+        cbufferVars = controller.GetCBufferVariableContents(pipe.GetGraphicsPipelineObject(),
+                                                            pipe.GetShader(stage),
+                                                            pipe.GetShaderEntryPoint(stage), slot,
+                                                            cb.resourceId, cb.byteOffset, cb.byteSize)
+
+        if not cbufferVars:
+            break
+
+        for v in cbufferVars:
+            contents += print_var(v)
+        contents += '\n----------------------------------\n'
 
     return contents
-
-def sampleCode(controller):
-    print("Available disassembly formats:")
-
-    targets = controller.GetDisassemblyTargets(True)
-
-    for disasm in targets:
-        print("  - " + disasm)
-
-    target = targets[0]
-
-    state = controller.GetPipelineState()
-
-    # For some APIs, it might be relevant to set the PSO id or entry point name
-    pipe = state.GetGraphicsPipelineObject()
-    entry = state.GetShaderEntryPoint(rd.ShaderStage.Pixel)
-
-    # Get the pixel shader's reflection object
-    ps = state.GetShaderReflection(rd.ShaderStage.Pixel)
-
-    cb = state.GetConstantBuffer(rd.ShaderStage.Pixel, 0, 0)
-
-    print("Pixel shader:")
-    print(controller.DisassembleShader(pipe, ps, target))
-
-    cbufferVars = controller.GetCBufferVariableContents(pipe, ps.resourceId, entry, 0, cb.resourceId, 0, 0)
-
-    for v in cbufferVars:
-        printVar(v)
-
 
 def fetch_gpu_counters(controller):
     global g_draw_durations
