@@ -2017,6 +2017,7 @@ class Draw(Event):
         self.expanded_marker = get_expanded_marker_name()
         self.marker = get_marker_name()
         self.gpu_duration = 0
+        self.alpha_enabled = False
         if self.event_id in g_draw_durations:
             self.gpu_duration = g_draw_durations[self.event_id]
             if math.isnan(self.gpu_duration) or self.gpu_duration < 0:
@@ -2084,8 +2085,8 @@ class Draw(Event):
         controller.SetFrameEvent(self.event_id, False)
         # pso
         pso = None
-        state = controller.GetPipelineState()
-        pipe = state.GetGraphicsPipelineObject()
+        pipe_state = controller.GetPipelineState()
+        pipe = pipe_state.GetGraphicsPipelineObject()
 
         if API_TYPE == rd.GraphicsAPI.OpenGL:
             pso = controller.GetGLPipelineState()
@@ -2115,7 +2116,7 @@ class Draw(Event):
             shader_name = None
             short_shader_name = None
             refl = None
-            shader_id = state.GetShader(stage)
+            shader_id = pipe_state.GetShader(stage)
 
             if self.isDispatch():
                 if stage != 5:
@@ -2147,7 +2148,7 @@ class Draw(Event):
             if shader_id != rd.ResourceId.Null():
                 # api_full_log.write(str(shader_id))
                 # api_full_log.write('\n')
-                refl = state.GetShaderReflection(stage)
+                refl = pipe_state.GetShaderReflection(stage)
                 if hasattr(shader, 'programResourceId'):
                     # Opengl
                     program_name = get_resource_name(controller, shader.programResourceId)
@@ -2207,6 +2208,16 @@ class Draw(Event):
                     for sampler in mapping.samplers:
                         print(sampler.name)
 
+                if False:
+                    samplers = pipe_state.GetSamplers(stage)
+                    for sampler in samplers:
+                        print(sampler)
+
+                if self.color_buffers and self.color_buffers[0] != rd.ResourceId.Null():
+                    blends = pipe_state.GetColorBlends()
+                    for blend in blends:
+                        if blend.enabled:
+                            self.alpha_enabled = True
                 # raw txt
                 txt_file_name = get_resource_filename(g_assets_folder / shader_name, 'txt')
 
@@ -2301,6 +2312,7 @@ class Draw(Event):
                 summary += 'c'
             else:
                 summary += '%dc' % (color_count)
+
         if res_info:
             summary = '%s_%dX%d' % (summary, res_info.width, res_info.height)
         return summary
@@ -2350,6 +2362,8 @@ class Draw(Event):
 
         if self.expanded_marker:
             markdown.write('%s\n\n' % self.expanded_marker)
+    
+        markdown.write('Blends: %s\n\n' % ("Enabled" if self.alpha_enabled else "Disabled"))
     
         # shader section
         for stage in range(0, rd.ShaderStage.Count):
