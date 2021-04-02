@@ -2295,16 +2295,16 @@ class Draw(Event):
         summary = ''
         color_count = 0
         depth_count = 0
-        res_info = None
+        texture_info = None
         for resource_id in self.color_buffers:
             if resource_id != rd.ResourceId.Null():
                 color_count += 1
-                if not res_info:
-                    res_info = get_texture_info(controller, resource_id)
+                if not texture_info:
+                    texture_info = get_texture_info(controller, resource_id)
         if self.depth_buffer != rd.ResourceId.Null():
             depth_count += 1
-            if not res_info:
-                res_info = get_texture_info(controller, self.depth_buffer)            
+            if not texture_info:
+                texture_info = get_texture_info(controller, self.depth_buffer)            
         if depth_count > 0:
             summary = 'z'
         else:
@@ -2315,29 +2315,29 @@ class Draw(Event):
             else:
                 summary += '%dc' % (color_count)
 
-        if res_info:
-            summary = '%s_%dX%d' % (summary, res_info.width, res_info.height)
+        if texture_info:
+            summary = '%s_%dX%d' % (summary, texture_info.width, texture_info.height)
         return summary
 
     def writeTextureMarkdown(self, markdown, controller, caption_suffix, resource_id, texture_file_name):
-        res_info = get_texture_info(controller, resource_id)
+        texture_info = get_texture_info(controller, resource_id)
         depth_info = ''
         arraysize_info = ''
         mips_info = ''
-        if res_info.depth > 1:
-            depth_info = 'x%d' % res_info.depth
-        if res_info.arraysize > 1:
-            arraysize_info = '[%d]' % res_info.arraysize
-        if res_info.mips > 1:
-            mips_info = '%d mips ' % res_info.mips
-        res_info_text = '(%dX%d%s%s %s%s)' % (res_info.width, res_info.height, depth_info, arraysize_info, mips_info, rd.ResourceFormat(res_info.format).Name() )
+        if texture_info.depth > 1:
+            depth_info = 'x%d' % texture_info.depth
+        if texture_info.arraysize > 1:
+            arraysize_info = '[%d]' % texture_info.arraysize
+        if texture_info.mips > 1:
+            mips_info = '%d mips ' % texture_info.mips
+        texture_info_text = '(%dX%d%s%s %s%s)' % (texture_info.width, texture_info.height, depth_info, arraysize_info, mips_info, rd.ResourceFormat(texture_info.format).Name() )
 
         # enum class ResourceFormatType
         # rdcstr ResourceFormatName(const ResourceFormat &fmt)
         # markdown.write('<img src="%s" class="lazyload" data-src="%s" width=%s border="2">\n' % ('../src/logo.png', texture_file_name, '50%'))
-        # caption_suffix, res_info_text
-        markdown.write('![%s `%s`](%s class="lazyload" data-src="%s" border="2")' % (caption_suffix, res_info_text, "../src/logo.png", texture_file_name))
-        # markdown.write('![%s `%s`](%s class="lazyload" loading="lazy" border="2")' % (caption_suffix, res_info_text, texture_file_name))
+        # caption_suffix, texture_info_text
+        markdown.write('![%s `%s`](%s class="lazyload" data-src="%s" border="2")' % (caption_suffix, texture_info_text, "../src/logo.png", texture_file_name))
+        # markdown.write('![%s `%s`](%s class="lazyload" loading="lazy" border="2")' % (caption_suffix, texture_info_text, texture_file_name))
     
     def writeDetailHtml(self, markdown, controller):
         self.writeIndexHtml(markdown, controller)
@@ -2469,15 +2469,12 @@ def export_texture(controller, resource_id, file_name):
         return
 
     file_name = str(file_path)
-    res_info = get_texture_info(controller, resource_id)
+    texture_info = get_texture_info(controller, resource_id)
 
     texsave = rd.TextureSave()
-    if True or res_info.mips == 1:
-        texsave.alpha = rd.AlphaMapping.Discard
-        texsave.destType = rd.FileType.JPG
-    else:
-        texsave.alpha = rd.AlphaMapping.Preserve
-        texsave.destType = rd.FileType.PNG
+    fmt = rd.ResourceFormat(texture_info.format).Name()
+    texsave.alpha = rd.AlphaMapping.BlendToCheckerboard
+    texsave.destType = rd.FileType.JPG
 
     texsave.mip = 0
     texsave.slice.sliceIndex = 0
@@ -2486,7 +2483,7 @@ def export_texture(controller, resource_id, file_name):
     print("Writing %s" % file_name)
     controller.SaveTexture(texsave, file_name)
 
-    if not 'pyrenderdoc' in globals() and res_info.creationFlags & rd.TextureCategory.DepthTarget:
+    if not 'pyrenderdoc' in globals() and texture_info.creationFlags & rd.TextureCategory.DepthTarget:
         # equalizeHist
         try:
             import cv2
@@ -3068,6 +3065,7 @@ def visit_draw(controller, draw, level = 0):
     return True
 
 def get_texture_info(controller, resource_id):
+    # struct TextureDescription
     if resource_id == rd.ResourceId.Null():
         return None
 
