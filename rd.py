@@ -56,6 +56,8 @@ API_TYPE = None # GraphicsAPI
 IMG_EXT = 'jpg'
 
 def getSafeName(name):
+    if len(name) > 100:
+        name = name[0: 99]
     return name.replace('/', '_').replace('#', '_').replace(' ', '_').replace('(', '_').replace(')', '_').replace('.', '_').replace(':', '_').replace('|', '_').replace('-', '_').replace('{', '_').replace('}', '_')
 
 class ShaderStage(Enum):
@@ -2191,9 +2193,9 @@ class Draw(Event):
 
                     # const_buffer--%4d.html
                     resource_name = 'const_buffer--%04d' % (self.draw_id)
-                    file_name = get_resource_filename(resource_name, 'html')
+                    file_name = get_resource_filename(g_assets_folder / resource_name, 'html')
                     if not Path(file_name).exists():
-                        with open(g_assets_folder / file_name, 'w') as fp:
+                        with open(file_name, 'w') as fp:
                             fp.write(markdeep_head)
                             for stage in range(0, rd.ShaderStage.Count):
                                 if self.shader_cb_contents[stage]:
