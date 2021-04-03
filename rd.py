@@ -56,6 +56,8 @@ API_TYPE = None # GraphicsAPI
 IMG_EXT = 'jpg'
 
 def getSafeName(name):
+    if name[0] == '_':
+        name = name[1:]
     if len(name) > 100:
         name = name[0: 99]
     return name.replace('/', '_').replace('#', '_').replace(' ', '_').replace('(', '_').replace(')', '_').replace('.', '_').replace(':', '_').replace('|', '_').replace('-', '_').replace('{', '_').replace('}', '_')
