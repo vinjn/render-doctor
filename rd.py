@@ -2235,15 +2235,25 @@ class Draw(Event):
                 if not Path(html_file_name).exists():
                     highlevel_shader = ''
                     shader_analysis = ''
-                    if API_TYPE == rd.GraphicsAPI.OpenGL:
-                        highlevel_shader = str(refl.rawBytes, 'utf-8')
-                        highlevel_shader = highlevel_shader.replace('<', ' < ') # fix a glsl syntax bug
-                        
+                    if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
+                        if API_TYPE == rd.GraphicsAPI:
+                            highlevel_shader = str(refl.rawBytes, 'utf-8')
+                            highlevel_shader = highlevel_shader.replace('<', ' < ') # fix a glsl syntax bug
+                            lang = '--opengles'
+                        else:
+                            targets = controller.GetDisassemblyTargets(True)
+                            targets = controller.GetDisassemblyTargets(True)
+                            for t in targets:
+                                highlevel_shader = controller.DisassembleShader(pipe, refl, t)
+                                break
+                            lang = '--vulkan'
+
                         malioc_exe = g_assets_folder / '../' / 'mali_offline_compiler/malioc.exe'
                         if WRITE_MALIOC and  malioc_exe.exists():
                             args = [
                                 str(malioc_exe),
                                 shader_flags[stage],
+                                lang,
                                 txt_file_name
                             ]
                             proc = subprocess.Popen(args, stdout=subprocess.PIPE, shell=True)
