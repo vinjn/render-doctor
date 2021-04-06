@@ -2236,7 +2236,7 @@ class Draw(Event):
                     highlevel_shader = ''
                     shader_analysis = ''
                     if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
-                        if API_TYPE == rd.GraphicsAPI:
+                        if API_TYPE == rd.GraphicsAPI.OpenGL:
                             highlevel_shader = str(refl.rawBytes, 'utf-8')
                             highlevel_shader = highlevel_shader.replace('<', ' < ') # fix a glsl syntax bug
                             lang = '--opengles'
@@ -2377,21 +2377,22 @@ class Draw(Event):
         if self.expanded_marker:
             markdown.write('%s\n\n' % self.expanded_marker)
     
-        markdown.write('Blends: %s\n\n' % ("Enabled" if self.alpha_enabled else "Disabled"))
-    
-        # shader section
-        for stage in range(0, rd.ShaderStage.Count):
-            if self.shader_names[stage] != None:
-                # TODO: refactor
-                markdown.write("%s: %s " % (ShaderStage(stage).name, linkable_get_resource_filename(self.shader_names[stage], 'html')))
+        if not self.isClear() and not self.isCopy():
+            markdown.write('Blends: %s\n\n' % ("Enabled" if self.alpha_enabled else "Disabled"))
+        
+            # shader section
+            for stage in range(0, rd.ShaderStage.Count):
+                if self.shader_names[stage] != None:
+                    # TODO: refactor
+                    markdown.write("%s: %s " % (ShaderStage(stage).name, linkable_get_resource_filename(self.shader_names[stage], 'html')))
 
-        # cb / constant buffer section
-        if WRITE_CONST_BUFFER:
-            resource_name = 'const_buffer--%04d' % (self.draw_id)
-            file_name = get_resource_filename(resource_name, 'html')
-            markdown.write("%s: %s" % ('CB', link_to_file(resource_name, file_name)))
+            # cb / constant buffer section
+            if WRITE_CONST_BUFFER:
+                resource_name = 'const_buffer--%04d' % (self.draw_id)
+                file_name = get_resource_filename(resource_name, 'html')
+                markdown.write("CB: %s" % (link_to_file(resource_name, file_name)))
 
-        markdown.write('\n\n')
+            markdown.write('\n\n')
 
         if not self.isDispatch():
             # color buffer section
