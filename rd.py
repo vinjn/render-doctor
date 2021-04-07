@@ -2199,11 +2199,12 @@ class Draw(Event):
                     if not Path(file_name).exists():
                         with open(file_name, 'w') as fp:
                             fp.write(markdeep_head)
-                            for stage in range(0, rd.ShaderStage.Count):
-                                if self.shader_cb_contents[stage]:
-                                    fp.write('# %s\n' % (ShaderStage(stage).name)) # shader type head "VS", "FS" etc
+                            for s in range(0, rd.ShaderStage.Count):
+                                # TODO:
+                                if self.shader_cb_contents[s]:
+                                    fp.write('# %s\n' % (ShaderStage(s).name)) # shader type head "VS", "FS" etc
                                     fp.write('```glsl\n')
-                                    fp.write(self.shader_cb_contents[stage])
+                                    fp.write(self.shader_cb_contents[s])
                                     fp.write('\n```\n')
                                     fp.write("\n\n")
                 if False:
@@ -2241,7 +2242,6 @@ class Draw(Event):
                             highlevel_shader = highlevel_shader.replace('<', ' < ') # fix a glsl syntax bug
                             lang = '--opengles'
                         else:
-                            targets = controller.GetDisassemblyTargets(True)
                             targets = controller.GetDisassemblyTargets(True)
                             for t in targets:
                                 highlevel_shader = controller.DisassembleShader(pipe, refl, t)
