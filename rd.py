@@ -1740,8 +1740,12 @@ class TextureDoctor:
 
             is_single_color = True
             fmt = self.info.format
+            stride = fmt.compByteWidth * fmt.compCount
             if fmt.compByteWidth == 1 and fmt.compType == rd.CompType.UNorm:
                 unpack_string = 'B' * fmt.compCount
+            # elif fmt.compByteWidth == 0 and fmt.compType == rd.CompType.UNorm:
+            #     stride = 1 * fmt.compCount
+            #     unpack_string = 'B' * fmt.compCount
             elif fmt.compByteWidth == 2 and fmt.compType == rd.CompType.Float:
                 unpack_string = 'e' * fmt.compCount
             elif fmt.compByteWidth == 4 and fmt.compType == rd.CompType.Float:
@@ -1751,7 +1755,6 @@ class TextureDoctor:
 
             if unpack_string:
                 prev_pixel = struct.unpack_from(unpack_string, pixels, 0)
-                stride = fmt.compByteWidth * fmt.compCount
                 for i in range(self.info.width * self.info.height):
                     pixel = struct.unpack_from(unpack_string, pixels, i * stride)
                     if prev_pixel != pixel:
