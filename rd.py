@@ -29,6 +29,7 @@ from datetime import datetime
 from collections import defaultdict, OrderedDict
 from enum import Enum, auto
 import subprocess
+import struct
 
 sys.path.append('../renderdoc/x64/Development/pymodules')
 os.environ["PATH"] += os.pathsep + os.path.abspath('../renderdoc/x64/Development')
@@ -1720,11 +1721,13 @@ class TextureDoctor:
     def __init__(self, controller, resource_id):
         self.name = get_resource_name(controller, resource_id, False)
         self.info = get_texture_info(controller, resource_id)
+        self.channels = self.info.format.compCount
         self.format = rd.ResourceFormat(self.info.format).Name()
 
         self.tips = []
+ 
         # doctor jobs...
-        if self.info.creationFlags == rd.TextureCategory.ColorTarget:
+        if self.info.creationFlags & rd.TextureCategory.ColorTarget:
             if 'R16G16B16A16_FLOAT' in self.format:
                 self.tips.append('64bits_per_pixel')
         name_lower = self.name.lower()
@@ -1732,6 +1735,33 @@ class TextureDoctor:
             # white-list, "2D" textures, used as HUD, UI etc.
             pass
         elif self.info.creationFlags == rd.TextureCategory.ShaderRead:
+            # read-only texture
+            pixels = controller.GetTextureData(resource_id, rd.Subresource(0, 0, 0))
+
+            is_single_color = True
+            fmt = self.info.format
+            if fmt.compByteWidth == 1 and fmt.compType == rd.CompType.UNorm:
+                unpack_string = 'B' * fmt.compCount
+            elif fmt.compByteWidth == 2 and fmt.compType == rd.CompType.Float:
+                unpack_string = 'e' * fmt.compCount
+            elif fmt.compByteWidth == 4 and fmt.compType == rd.CompType.Float:
+                unpack_string = 'f' * fmt.compCount                
+            else:
+                unpack_string = ''
+
+            if unpack_string:
+                prev_pixel = struct.unpack_from(unpack_string, pixels, 0)
+                stride = fmt.compByteWidth * fmt.compCount
+                for i in range(self.info.width * self.info.height):
+                    pixel = struct.unpack_from(unpack_string, pixels, i * stride)
+                    if prev_pixel != pixel:
+                        is_single_color = False
+                        break
+                    prev_pixel = pixel
+        
+                if is_single_color:
+                    self.tips.append('single_color' + str(prev_pixel))
+
             if 'lightmap' not in name_lower and (self.info.width > 512 or self.info.height > 512):
                 self.tips.append('large_dimension')
             if self.info.width >= 256 and self.info.height >= 256:
@@ -2486,9 +2516,11 @@ def export_texture(controller, resource_id, file_name):
 
     texsave = rd.TextureSave()
     fmt = rd.ResourceFormat(texture_info.format).Name()
-    texsave.alpha = rd.AlphaMapping.BlendToCheckerboard
+    if texture_info.format.compCount == 3:
+        texsave.alpha = rd.AlphaMapping.Discard
+    else:
+        texsave.alpha = rd.AlphaMapping.BlendToCheckerboard
     texsave.destType = rd.FileType.JPG
-
     texsave.mip = 0
     texsave.slice.sliceIndex = 0
     texsave.resourceId = resource_id
@@ -2528,9 +2560,6 @@ class Frame:
 
         self.addPass()
         self.stateNameDict = defaultdict(int)
-        self.nextStateNameDict = defaultdict(int)
-
-        pass
 
     def addPass(self):
         # print("addPass %d" % (len(self.passes)))
@@ -2586,8 +2615,8 @@ class Frame:
 
         markdown.write('# Resource Overview\n')
 
-        markdown.write('name|type|usage|dimension|mips|format|tips|preview\n')
-        markdown.write('----|----|-----|--------:|---:|------|----|------\n')
+        markdown.write('name|type|usage|dimension|mips|format|channels|bytes|tips|preview\n')
+        markdown.write('----|----|-----|--------:|---:|------|--------|-----|----|-------\n')
         
         for tex_pair in texture_array:
             file_name = get_resource_filename(getSafeName(tex_pair.name), IMG_EXT)
@@ -2595,13 +2624,15 @@ class Frame:
             export_texture(controller, tex_info.resourceId, file_name)
             texType = '%s' % rd.TextureType(tex_info.type)
             category = '%s' % rd.TextureCategory(tex_info.creationFlags)
-            markdown.write('%s|%s|%s|%s|%d|%s|%s|%s\n' % (
+            markdown.write('%s|%s|%s|%s|%d|%s|%d|%s|%s|%s\n' % (
                 tex_pair.name,
                 texType.replace('TextureType.Texture', ''),
                 category.replace('TextureCategory.', '').replace('ShaderRead','T').replace('ColorTarget','C').replace('DepthTarget','Z').replace('|',''),
                 '%dx%d' % (tex_info.width, tex_info.height),
                 tex_info.mips,
                 tex_pair.format,
+                tex_pair.channels,
+                pretty_number(tex_info.byteSize),
                 '<br>'.join(tex_pair.tips),
                 '![](%s class="lazyload" data-src="%s" width="%s")' % ('../src/logo.png', file_name, '20%')
             ))
@@ -2733,9 +2764,8 @@ class Frame:
                         z_filename = get_resource_filename('%s--%04d_z' % (resource_name, lastDraw.draw_id), IMG_EXT)
 
                 for c in c_filenames:
-                    if 'Bloom' in statesSummary or 'bloom' in statesSummary or 'BLOOM' in statesSummary \
-                        or 'Bloom' in markersSummary or 'bloom' in markersSummary or 'BLOOM' in markersSummary:
-                        # Save space for Bloom passes
+                    if 'bloom' in statesSummary.lower() or 'bloom' in markersSummary.lower():
+                        # Save html space for Bloom passes
                         c_info += self.getImageLinkOrNothing(c, '10%')
                     else:
                         c_info += self.getImageLinkOrNothing(c)
@@ -2761,7 +2791,6 @@ class Frame:
         markdown.write('%s|%d|%d|%d\n' % (label, item.calls, item.sets, item.nulls))
 
     def getUniqueStateName(self, passName, stateName):
-        self.nextStateNameDict[stateName] += 1
         if self.stateNameDict[stateName] == 1:
             return stateName
         return '%s_%s' % (passName, stateName)
@@ -3089,18 +3118,37 @@ def get_texture_info(controller, resource_id):
     
     return None
 
+resource_name_count = {}
+resource_name_dict = {}
+
 def get_resource_name(controller, resource_id, get_safe_name = True):
     if resource_id == rd.ResourceId.Null():
         return "NULL"
 
-    resources = controller.GetResources()
-    for res in resources:
-        if resource_id == res.resourceId:
-            if get_safe_name:
-                return getSafeName(res.name)
-            return res.name
+    if resource_id not in resource_name_dict:
+        resource_name_dict[resource_id] = 'res_%d' % int(resource_id)
 
-    return "Res_" + int(resource_id)
+        resources = controller.GetResources()
+        for res in resources:
+            if resource_id == res.resourceId:
+                name = res.name
+                count = 0
+                if name in resource_name_count:
+                    resource_name_count[name] += 1
+                    count = resource_name_count[name]
+                else:
+                    resource_name_count[name] = count
+
+                if get_safe_name:
+                    name = getSafeName(res.name)
+                else:
+                    name = res.name
+                
+                if count > 0:
+                    name = '%s_%d' % (name, count)
+                resource_name_dict[resource_id] = name
+
+    return resource_name_dict[resource_id]
 
 def generate_raw_data(controller):
     print('^generate_raw_data')
