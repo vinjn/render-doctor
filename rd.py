@@ -1718,7 +1718,7 @@ mermaid_head = """
 
 rdc_file = '.rdc'
 
-class TextureDoctor:
+class TextureTip:
     def __init__(self, controller, resource_id):
         self.name = get_resource_name(controller, resource_id, False)
         self.info = get_texture_info(controller, resource_id)
@@ -2058,7 +2058,7 @@ class Draw(Event):
         self.gpu_duration = 0
 
         self.alpha_enabled = False
-        self.write_mask = ['-'] * 4
+        self.write_mask = [' '] * 4
 
         if self.event_id in g_draw_durations:
             self.gpu_duration = g_draw_durations[self.event_id]
@@ -2262,10 +2262,10 @@ class Draw(Event):
                         if blend.enabled:
                             self.alpha_enabled = True
 
-                        if blend.writeMask & 0b0001: self.write_mask[0] = 'r'
-                        if blend.writeMask & 0b0010: self.write_mask[1] = 'g'
-                        if blend.writeMask & 0b0100: self.write_mask[2] = 'b'
-                        if blend.writeMask & 0b1000: self.write_mask[3] = 'a'
+                        if blend.writeMask & 0b0001: self.write_mask[0] = 'R'
+                        if blend.writeMask & 0b0010: self.write_mask[1] = 'G'
+                        if blend.writeMask & 0b0100: self.write_mask[2] = 'B'
+                        if blend.writeMask & 0b1000: self.write_mask[3] = 'A'
                         # TODO: support MRT
                         break
                 # raw txt
@@ -2617,12 +2617,12 @@ class Frame:
             # TODO: support other formats
             return
 
-        texture_array = []
+        texture_tips = []
 
         for resource_id in g_frame.textures:
             if not resource_id or resource_id == rd.ResourceId.Null():
                 continue
-            texture_array.append(TextureDoctor(controller, resource_id))
+            texture_tips.append(TextureTip(controller, resource_id))
 
         def getName(elem):
             return elem.name
@@ -2630,16 +2630,16 @@ class Frame:
         def getTipsLength(elem):
             return len(elem.tips)
 
-        texture_array = sorted(texture_array, key=getName)
-        texture_array = sorted(texture_array, key=getTipsLength, reverse=True)
+        texture_tips = sorted(texture_tips, key=getName)
+        texture_tips = sorted(texture_tips, key=getTipsLength, reverse=True)
 
         markdown.write('# Resource Overview\n')
 
         markdown.write('name|type|usage|dimension|mips|format|channels|bytes|tips|preview\n')
         markdown.write('----|----|-----|--------:|---:|------|--------|-----|----|-------\n')
         
-        for tex_pair in texture_array:
-            file_name = get_resource_filename(getSafeName(tex_pair.name), IMG_EXT)
+        for tex_pair in texture_tips:
+            file_name = get_resource_filename(get_resource_name(controller, resource_id), IMG_EXT)
             tex_info = tex_pair.info
             export_texture(controller, tex_info.resourceId, file_name)
             texType = '%s' % rd.TextureType(tex_info.type)
@@ -2664,10 +2664,10 @@ class Frame:
 
         markdown.write('# Frame Overview\n')
 
-        header =       'pass|state|(ms)|marker|mask|draws|instances|verts|z|c\n'
+        header =       'pass|state|(ms)|marker|blend|mask|draws|instances|verts|z|c\n'
         summary_csv.write(header.replace('|',','))
         markdown.write(header)
-        markdown.write('----|-----|---:|------|----|----:|--------:|----:|-|-\n')
+        markdown.write('----|-----|---:|------|-----|----|----:|--------:|----:|-|-\n')
         overviewText = ''
 
         # TODO: so ugly
@@ -2690,6 +2690,7 @@ class Frame:
             timeSummary = ''
             markersSummary = ''
             maskSummary = ''
+            blendSummary = ''
             drawsSummary = ''
             callsSummary = ''
             vertsSummary = ''
@@ -2732,6 +2733,7 @@ class Frame:
                     timeSummary += '%.2f<br>' % m
 
                 maskSummary += '%s<br>' % ''.join(s.draws[-1].write_mask)
+                blendSummary += '%s<br>' % ('ON' if s.draws[-1].alpha_enabled else '')
 
                 summary_csv.write('%s,%s,%.3f,%s,%d,%d,%d,%s,%s\n' %(p.getName(controller).lower(), s.getName(), m, s.draws[-1].marker, 
                     len(s.draws), i, v, 
@@ -2758,6 +2760,7 @@ class Frame:
                 vertsSummary += '~%s<br>' % pretty_number(verts)
                 markersSummary += '<br>'
                 maskSummary += '<br>'
+                blendSummary += '<br>'
                 timeSummary += '~%.2f<br>' % time
 
             # total stats
@@ -2794,8 +2797,10 @@ class Frame:
                     else:
                         c_info += self.getImageLinkOrNothing(c)
                     
-            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
-            (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, markersSummary, maskSummary, drawsSummary, instancesSummary, vertsSummary, self.getImageLinkOrNothing(z_filename), c_info))
+            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
+            (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, 
+                markersSummary, blendSummary, maskSummary,
+                drawsSummary, instancesSummary, vertsSummary, self.getImageLinkOrNothing(z_filename), c_info))
         
         uniqueStateCounter = len(uniqueStateCounters)
         if has_clear_state:
@@ -2804,7 +2809,7 @@ class Frame:
         if has_copy_state:
             # remove "Copy" state
             uniqueStateCounter -= 1            
-        overviewText = ('%s|%s|%s|''|''|[%s](api_short.txt)|%s|%s|%s|%s\n' % 
+        overviewText = ('%s|%s|%s|''|''|''|[%s](api_short.txt)|%s|%s|%s|%s\n' % 
         ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, pretty_number(totalVerts), '', '')) + overviewText
         
         markdown.write(overviewText)
