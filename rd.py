@@ -2223,7 +2223,7 @@ class Draw(Event):
                 self.short_shader_names[stage] = short_shader_name
 
             if refl:
-                if API_TYPE == rd.GraphicsAPI.OpenGL and WRITE_CONST_BUFFER:
+                if WRITE_CONST_BUFFER:
                     self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage, self.shader_names[stage], refl, program_name)
 
                     # const_buffer--%4d.html
@@ -2410,7 +2410,10 @@ class Draw(Event):
         if self.expanded_marker:
             markdown.write('%s\n\n' % self.expanded_marker)
     
-        if not self.isClear() and not self.isCopy():
+        if self.isClear() or self.isCopy():
+            # to improve draw-level navigation by pressing 'd' and 'D'
+            markdown.write('<br><br>\n\n')
+        else:
             markdown.write('Blends: %s\n\n' % ("Enabled" if self.alpha_enabled else "Disabled"))
         
             # shader section
@@ -2519,7 +2522,7 @@ def export_texture(controller, resource_id, file_name):
 
     texsave = rd.TextureSave()
     fmt = rd.ResourceFormat(texture_info.format).Name()
-    if texture_info.format.compCount == 3:
+    if texture_info.format.compCount == 3 or 'A2' in fmt or 'A16' in fmt:
         texsave.alpha = rd.AlphaMapping.Discard
     else:
         texsave.alpha = rd.AlphaMapping.BlendToCheckerboard
@@ -2873,28 +2876,27 @@ class Frame:
 
         markdown.close()
 
-    def writeStats(self, markdown, controller):
+    def writeAPIOverview(self, markdown, controller):
         info = controller.GetFrameInfo()
         stats = info.stats
         if not stats.recorded:
             return
 
-        markdown.write('**Draw Call Statistics**\n')
+        markdown.write('# API Overview\n')
+        markdown.write('## Draw Call Statistics\n')
 
         markdown.write('type | calls | instanced | indirect\n')
         markdown.write('--------- | ----- | --------- | -------\n')
         markdown.write('%s|%d|%d|%d\n' % ('Draw', stats.draws.calls, stats.draws.instanced, stats.draws.indirect))
         markdown.write('%s|%d|%d|%d\n' % ('Dispatch', stats.dispatches.calls, 0, stats.dispatches.indirect))
-        markdown.write('\n--------\n')
 
-        markdown.write('**Resource Update Statistics**\n')
+        markdown.write('## Resource Update Statistics\n')
         markdown.write('calls | cpu_written | cpu_written\n')
         markdown.write('----- | --------- | -------\n')
         markdown.write('%d|%d|%d\n' % (stats.updates.calls, stats.updates.clients, stats.updates.servers))
-        markdown.write('\n--------\n')
 
-        markdown.write('**Resource Bind Statistics**\n')
-        markdown.write('tpye | calls | sets | nulls\n')
+        markdown.write('## Resource Bind Statistics\n')
+        markdown.write('type | calls | sets | nulls\n')
         markdown.write('---------- | ----- | ---- | -----\n')
         # self.writeBindStats(markdown, stats.updates)
         # markdown.write('%s|%s|%s' % (stats.updates.calls, stats.updates.clients, stats.updates.servers))
@@ -2938,21 +2940,19 @@ class Frame:
         self.writeFrameOverview(markdown, controller)
         self.writeShaderOverview(markdown, controller)
         self.writeResourceOverview(markdown, controller)
-        self.writeStats(markdown, controller)
-
-        markdown.write('\n--------\n')
+        self.writeAPIOverview(markdown, controller)
 
         for p in self.passes:
             p.writeIndexHtml(markdown, controller)
 
-        markdown.write("**Usage**\n\n")
+        markdown.write("## Usage\n\n")
         markdown.write("  * Press `p` / `shift+p` to jump between Passes\n")
         markdown.write("  * Press `s` / `shift+s` to jump between States\n")
         markdown.write("  * Press `d` / `shift+d` to jump between Draws\n")
         
         markdown.write('\n--------\n')
         
-        markdown.write("**Summary**\n\n")
+        markdown.write("## Summary\n\n")
         if WRITE_PSO_DAG:
             markdown.write("  * Experimental feature [pipeline dag](dag.html)\n")
         markdown.write("  * RDC: %s\n" % rdc_file)
@@ -3249,6 +3249,9 @@ def get_cbuffer_contents(controller, stage, shader_name, refl, program_name):
             'type': ShaderStage(stage).name,
             'uniforms': {}
         }
+
+    if API_TYPE != rd.GraphicsAPI.OpenGL:
+        setup_shader_doctor = False
 
     for slot in range(0, 4):
         cb = pipe.GetConstantBuffer(stage, slot, 0)
