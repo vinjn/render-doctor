@@ -47,6 +47,7 @@ WRITE_COLOR_BUFFER = True
 WRITE_TEXTURE = True
 WRITE_DEPTH_BUFFER = True
 WRITE_PSO_DAG = False
+WRITE_SINGLE_COLOR = False
 #######################################
 ### Config End
 ########################################
@@ -1735,35 +1736,36 @@ class TextureDoctor:
             # white-list, "2D" textures, used as HUD, UI etc.
             pass
         elif self.info.creationFlags == rd.TextureCategory.ShaderRead:
-            # read-only texture
-            pixels = controller.GetTextureData(resource_id, rd.Subresource(0, 0, 0))
+            if WRITE_SINGLE_COLOR:
+                # read-only texture
+                pixels = controller.GetTextureData(resource_id, rd.Subresource(0, 0, 0))
 
-            is_single_color = True
-            fmt = self.info.format
-            stride = fmt.compByteWidth * fmt.compCount
-            if fmt.compByteWidth == 1 and fmt.compType == rd.CompType.UNorm:
-                unpack_string = 'B' * fmt.compCount
-            # elif fmt.compByteWidth == 0 and fmt.compType == rd.CompType.UNorm:
-            #     stride = 1 * fmt.compCount
-            #     unpack_string = 'B' * fmt.compCount
-            elif fmt.compByteWidth == 2 and fmt.compType == rd.CompType.Float:
-                unpack_string = 'e' * fmt.compCount
-            elif fmt.compByteWidth == 4 and fmt.compType == rd.CompType.Float:
-                unpack_string = 'f' * fmt.compCount                
-            else:
-                unpack_string = ''
+                is_single_color = True
+                fmt = self.info.format
+                stride = fmt.compByteWidth * fmt.compCount
+                if fmt.compByteWidth == 1 and fmt.compType == rd.CompType.UNorm:
+                    unpack_string = 'B' * fmt.compCount
+                # elif fmt.compByteWidth == 0 and fmt.compType == rd.CompType.UNorm:
+                #     stride = 1 * fmt.compCount
+                #     unpack_string = 'B' * fmt.compCount
+                elif fmt.compByteWidth == 2 and fmt.compType == rd.CompType.Float:
+                    unpack_string = 'e' * fmt.compCount
+                elif fmt.compByteWidth == 4 and fmt.compType == rd.CompType.Float:
+                    unpack_string = 'f' * fmt.compCount                
+                else:
+                    unpack_string = ''
 
-            if unpack_string:
-                prev_pixel = struct.unpack_from(unpack_string, pixels, 0)
-                for i in range(self.info.width * self.info.height):
-                    pixel = struct.unpack_from(unpack_string, pixels, i * stride)
-                    if prev_pixel != pixel:
-                        is_single_color = False
-                        break
-                    prev_pixel = pixel
-        
-                if is_single_color:
-                    self.tips.append('single_color' + str(prev_pixel))
+                if unpack_string:
+                    prev_pixel = struct.unpack_from(unpack_string, pixels, 0)
+                    for i in range(self.info.width * self.info.height):
+                        pixel = struct.unpack_from(unpack_string, pixels, i * stride)
+                        if prev_pixel != pixel:
+                            is_single_color = False
+                            break
+                        prev_pixel = pixel
+            
+                    if is_single_color:
+                        self.tips.append('single_color' + str(prev_pixel))
 
             if 'lightmap' not in name_lower and (self.info.width > 512 or self.info.height > 512):
                 self.tips.append('large_dimension')
@@ -2054,7 +2056,10 @@ class Draw(Event):
         self.expanded_marker = get_expanded_marker_name()
         self.marker = get_marker_name()
         self.gpu_duration = 0
+
         self.alpha_enabled = False
+        self.write_mask = ['-'] * 4
+
         if self.event_id in g_draw_durations:
             self.gpu_duration = g_draw_durations[self.event_id]
             if math.isnan(self.gpu_duration) or self.gpu_duration < 0:
@@ -2256,6 +2261,13 @@ class Draw(Event):
                     for blend in blends:
                         if blend.enabled:
                             self.alpha_enabled = True
+
+                        if blend.writeMask & 0b0001: self.write_mask[0] = 'r'
+                        if blend.writeMask & 0b0010: self.write_mask[1] = 'g'
+                        if blend.writeMask & 0b0100: self.write_mask[2] = 'b'
+                        if blend.writeMask & 0b1000: self.write_mask[3] = 'a'
+                        # TODO: support MRT
+                        break
                 # raw txt
                 txt_file_name = get_resource_filename(g_assets_folder / shader_name, 'txt')
 
@@ -2414,8 +2426,10 @@ class Draw(Event):
             # to improve draw-level navigation by pressing 'd' and 'D'
             markdown.write('<br><br>\n\n')
         else:
-            markdown.write('Blends: %s\n\n' % ("Enabled" if self.alpha_enabled else "Disabled"))
-        
+            markdown.write('Blends: %s; ' % ("Enabled" if self.alpha_enabled else "Disabled"))
+            markdown.write('Write Mask: %s' % ''.join(self.write_mask))
+            markdown.write('\n\n')
+
             # shader section
             for stage in range(0, rd.ShaderStage.Count):
                 if self.shader_names[stage] != None:
@@ -2650,10 +2664,10 @@ class Frame:
 
         markdown.write('# Frame Overview\n')
 
-        header = 'pass|state|(ms)|marker|draws|instances|verts|z|c\n'
+        header =       'pass|state|(ms)|marker|mask|draws|instances|verts|z|c\n'
         summary_csv.write(header.replace('|',','))
         markdown.write(header)
-        markdown.write('----|-----|---:|------|----:|--------:|----:|-|-\n')
+        markdown.write('----|-----|---:|------|----|----:|--------:|----:|-|-\n')
         overviewText = ''
 
         # TODO: so ugly
@@ -2675,6 +2689,7 @@ class Frame:
             statesSummary = ''
             timeSummary = ''
             markersSummary = ''
+            maskSummary = ''
             drawsSummary = ''
             callsSummary = ''
             vertsSummary = ''
@@ -2716,6 +2731,8 @@ class Frame:
                     markersSummary += '%s<br>' % s.draws[-1].marker
                     timeSummary += '%.2f<br>' % m
 
+                maskSummary += '%s<br>' % ''.join(s.draws[-1].write_mask)
+
                 summary_csv.write('%s,%s,%.3f,%s,%d,%d,%d,%s,%s\n' %(p.getName(controller).lower(), s.getName(), m, s.draws[-1].marker, 
                     len(s.draws), i, v, 
                     s.vs_name or s.cs_name, s.ps_name or ''))
@@ -2740,6 +2757,7 @@ class Frame:
                 callsSummary += '~%d<br>' % calls
                 vertsSummary += '~%s<br>' % pretty_number(verts)
                 markersSummary += '<br>'
+                maskSummary += '<br>'
                 timeSummary += '~%.2f<br>' % time
 
             # total stats
@@ -2776,8 +2794,8 @@ class Frame:
                     else:
                         c_info += self.getImageLinkOrNothing(c)
                     
-            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
-            (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, markersSummary, drawsSummary, instancesSummary, vertsSummary, self.getImageLinkOrNothing(z_filename), c_info))
+            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
+            (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, markersSummary, maskSummary, drawsSummary, instancesSummary, vertsSummary, self.getImageLinkOrNothing(z_filename), c_info))
         
         uniqueStateCounter = len(uniqueStateCounters)
         if has_clear_state:
@@ -2786,7 +2804,7 @@ class Frame:
         if has_copy_state:
             # remove "Copy" state
             uniqueStateCounter -= 1            
-        overviewText = ('%s|%s|%s|''|[%s](api_short.txt)|%s|%s|%s|%s\n' % 
+        overviewText = ('%s|%s|%s|''|''|[%s](api_short.txt)|%s|%s|%s|%s\n' % 
         ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, pretty_number(totalVerts), '', '')) + overviewText
         
         markdown.write(overviewText)
@@ -3071,7 +3089,7 @@ def visit_draw(controller, draw, level = 0):
             new_event = Event(controller, ev, level)
             State.current.addEvent(new_event)
 
-        if  draw.flags & rd.DrawFlags.Drawcall \
+        if draw.flags & rd.DrawFlags.Drawcall \
             or draw.flags & rd.DrawFlags.Dispatch \
             or draw.flags & rd.DrawFlags.MultiDraw \
             or draw.flags & rd.DrawFlags.Clear \
