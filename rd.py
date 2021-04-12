@@ -1725,6 +1725,7 @@ rdc_file = '.rdc'
 
 class TextureTip:
     def __init__(self, controller, resource_id):
+        self.resource_id = resource_id
         self.name = get_resource_name(controller, resource_id, True)
         self.info = get_texture_info(controller, resource_id)
         self.channels = self.info.format.compCount
@@ -2643,22 +2644,22 @@ class Frame:
         markdown.write('name|type|usage|dimension|mips|format|channels|bytes|tips|preview\n')
         markdown.write('----|----|-----|--------:|---:|------|--------|-----|----|-------\n')
         
-        for tex_pair in texture_tips:
-            file_name = get_resource_filename(get_resource_name(controller, resource_id), IMG_EXT)
-            tex_info = tex_pair.info
+        for tip in texture_tips:
+            file_name = get_resource_filename(get_resource_name(controller, tip.resource_id), IMG_EXT)
+            tex_info = tip.info
             export_texture(controller, tex_info.resourceId, file_name)
             texType = '%s' % rd.TextureType(tex_info.type)
             category = '%s' % rd.TextureCategory(tex_info.creationFlags)
             markdown.write('%s|%s|%s|%s|%d|%s|%d|%s|%s|%s\n' % (
-                tex_pair.name,
+                tip.name,
                 texType.replace('TextureType.Texture', ''),
                 category.replace('TextureCategory.', '').replace('ShaderRead','T').replace('ColorTarget','C').replace('DepthTarget','Z').replace('|',''),
                 '%dx%d' % (tex_info.width, tex_info.height),
                 tex_info.mips,
-                tex_pair.format,
-                tex_pair.channels,
+                tip.format,
+                tip.channels,
                 pretty_number(tex_info.byteSize),
-                '<br>'.join(tex_pair.tips),
+                '<br>'.join(tip.tips),
                 '![](%s class="lazyload" data-src="%s" width="%s")' % ('../src/logo.png', file_name, '20%')
             ))
 
