@@ -62,7 +62,12 @@ def getSafeName(name):
         name = name[1:]
     if len(name) > 100:
         name = name[0: 99]
-    return name.replace('/', '_').replace('#', '_').replace(' ', '_').replace('(', '_').replace(')', '_').replace('.', '_').replace(':', '_').replace('|', '_').replace('-', '_').replace('{', '_').replace('}', '_')
+
+    invalid_chars = '\/:*?"<>|#() -{}.'
+    for c in invalid_chars:
+        name = name.replace(c, '_')
+    name = name.replace('__', '_')
+    return name
 
 class ShaderStage(Enum):
     VS = 0
@@ -1720,7 +1725,7 @@ rdc_file = '.rdc'
 
 class TextureTip:
     def __init__(self, controller, resource_id):
-        self.name = get_resource_name(controller, resource_id, False)
+        self.name = get_resource_name(controller, resource_id, True)
         self.info = get_texture_info(controller, resource_id)
         self.channels = self.info.format.compCount
         self.format = rd.ResourceFormat(self.info.format).Name()
@@ -1850,7 +1855,7 @@ class Pass:
         if not pass_info:
             self.name = "Pass%d" % (self.pass_id)
         else:
-            self.name = "Pass%d__%s" % (self.pass_id, pass_info)
+            self.name = "Pass%d_%s" % (self.pass_id, pass_info)
 
         return self.name
 
@@ -2195,13 +2200,13 @@ class Draw(Event):
                     # Opengl
                     program_name = get_resource_name(controller, shader.programResourceId)
                     short_shader_name = get_resource_name(controller, shader.shaderResourceId)
-                    shader_name = program_name + '__' + short_shader_name
+                    shader_name = program_name + '_' + short_shader_name
                 elif hasattr(pso, 'pipelineResourceId'):
                     # DX12
                     program_name = get_resource_name(controller, pso.pipelineResourceId)
                     program_name = program_name.replace('Pipeline_State', 'pso')
                     short_shader_name = get_resource_name(controller, shader_id)
-                    shader_name = program_name + '__' + short_shader_name
+                    shader_name = program_name + '_' + short_shader_name
                 elif hasattr(pso, 'graphics') or hasattr(pso, 'compute'):
                     # Vulkan
                     p = pso.graphics or pso.graphics
@@ -2210,16 +2215,16 @@ class Draw(Event):
                     short_shader_name = get_resource_name(controller, shader_id)
                     # .replace('Shader_Module', 'shader')
                     if 'Shader_Module' in short_shader_name:
-                        shader_name = program_name + '__' + ShaderStage(stage).name
+                        shader_name = program_name + '_' + ShaderStage(stage).name
                     else:
                         program_name = short_shader_name 
-                        shader_name = short_shader_name + '__' + ShaderStage(stage).name
+                        shader_name = short_shader_name + '_' + ShaderStage(stage).name
                 else:
                     short_shader_name = get_resource_name(controller, shader_id)
                     short_shader_name = short_shader_name.replace('Vertex_Shader', 'vs').replace('Pixel_Shader', 'ps').replace('Compute_Shader', 'cs').replace('Shader_Module', 'shader').replace('Geometry_Shader', 'gs')
                     if program_name and short_shader_name not in program_name:
                             # Skip duplicated shader names in same program
-                            program_name += '__'
+                            program_name += '_'
                             program_name += short_shader_name
                     else:
                         program_name = 's_' + short_shader_name
@@ -2417,7 +2422,7 @@ class Draw(Event):
     def writeIndexHtml(self, markdown, controller):
         global g_assets_folder
 
-        markdown.write('### [D]%04d %s\n\n' % (self.draw_id, self.name.replace('#', '__')))
+        markdown.write('### [D]%04d %s\n\n' % (self.draw_id, self.name.replace('#', '_')))
 
         if self.expanded_marker:
             markdown.write('%s\n\n' % self.expanded_marker)
