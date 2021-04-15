@@ -2336,26 +2336,27 @@ class Draw(Event):
                         self.textures.append(resource_id)
         self.state_key = program_name
 
-        if API_TYPE == rd.GraphicsAPI.OpenGL and self.depth_buffer:
-            depthState : rd.GLPipe.DepthState = api_state.depthState
-            if depthState.depthEnable: self.depth_state[0] = 'R'
-            if depthState.depthWrites: self.depth_state[1] = 'W'
+        if not self.isDispatch():
+            if API_TYPE == rd.GraphicsAPI.OpenGL and self.depth_buffer:
+                depthState : rd.GLPipe.DepthState = api_state.depthState
+                if depthState.depthEnable: self.depth_state[0] = 'R'
+                if depthState.depthWrites: self.depth_state[1] = 'W'
 
-            stencilState : rd.GLPipe.StencilState = api_state.stencilState
-            if stencilState.stencilEnable: self.depth_state[2] = '+S'
+                stencilState : rd.GLPipe.StencilState = api_state.stencilState
+                if stencilState.stencilEnable: self.depth_state[2] = '+S'
 
-        if self.color_buffers and self.color_buffers[0] != rd.ResourceId.Null():
-            blends = pipe_state.GetColorBlends()
-            for blend in blends:
-                if blend.enabled:
-                    self.alpha_enabled = True
+            if self.color_buffers and self.color_buffers[0] != rd.ResourceId.Null():
+                blends = pipe_state.GetColorBlends()
+                for blend in blends:
+                    if blend.enabled:
+                        self.alpha_enabled = True
 
-                if blend.writeMask & 0b0001: self.write_mask[0] = 'R'
-                if blend.writeMask & 0b0010: self.write_mask[1] = 'G'
-                if blend.writeMask & 0b0100: self.write_mask[2] = 'B'
-                if blend.writeMask & 0b1000: self.write_mask[3] = 'A'
-                # TODO: support MRT
-                break
+                    if blend.writeMask & 0b0001: self.write_mask[0] = 'R'
+                    if blend.writeMask & 0b0010: self.write_mask[1] = 'G'
+                    if blend.writeMask & 0b0100: self.write_mask[2] = 'B'
+                    if blend.writeMask & 0b1000: self.write_mask[3] = 'A'
+                    # TODO: support MRT
+                    break
             
         if self.state_key != State.current.getName():
             # detects a PSO change
