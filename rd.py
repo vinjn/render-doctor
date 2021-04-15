@@ -63,7 +63,7 @@ def getSafeName(name):
     if len(name) > 100:
         name = name[0: 99]
 
-    invalid_chars = '\/:*?"<>|#() -{}.'
+    invalid_chars = r'\/:*?"<>|#() -{}.'
     for c in invalid_chars:
         name = name.replace(c, '_')
     name = name.replace('__', '_')
@@ -1898,7 +1898,7 @@ class State:
         State.s_id += 1
 
         if draw:
-            self.name = draw.pso_key
+            self.name = draw.state_key
             self.vs_name = draw.short_shader_names[rd.ShaderStage.Vertex]
             self.ps_name = draw.short_shader_names[rd.ShaderStage.Pixel]
             self.cs_name = draw.short_shader_names[rd.ShaderStage.Compute]
@@ -2052,7 +2052,7 @@ class Draw(Event):
         self.draw_id = draw.drawcallId
         self.name = draw.name
         self.level = level
-        self.pso_key = ''
+        self.state_key = ''
         self.short_shader_names = [None] * rd.ShaderStage.Count
         self.shader_names = [None] * rd.ShaderStage.Count
         self.shader_cb_contents = [None] * rd.ShaderStage.Count
@@ -2064,6 +2064,8 @@ class Draw(Event):
         self.gpu_duration = 0
 
         self.alpha_enabled = False
+        self.stencil_enabled = False
+        self.depth_state = [' '] * 2
         self.write_mask = [' '] * 4
 
         if self.event_id in g_draw_durations:
@@ -2105,9 +2107,9 @@ class Draw(Event):
             return
 
         if self.isClear():
-            self.pso_key = 'Clear'
+            self.state_key = 'Clear'
 
-            if self.pso_key != State.current.getName():
+            if self.state_key != State.current.getName():
                 # detects a PSO change
                 # TODO: this is too ugly
                 # TODO: this is double double ugly
@@ -2115,9 +2117,9 @@ class Draw(Event):
             return
 
         if self.isCopy():
-            self.pso_key = 'Copy'
+            self.state_key = 'Copy'
 
-            if self.pso_key != State.current.getName():
+            if self.state_key != State.current.getName():
                 Pass.current.addState(self)
             return
 
@@ -2125,26 +2127,24 @@ class Draw(Event):
 
         if API_TYPE == rd.GraphicsAPI.Vulkan and self.isDispatch():
             # on Android devices, Vulkan dispatch calls will likely crash renderdoc, so we skip them
-            self.pso_key = 'compute_shader'
-            if self.pso_key != State.current.getName():
+            self.state_key = 'compute_shader'
+            if self.state_key != State.current.getName():
                 Pass.current.addState(self)
             return
 
         controller.SetFrameEvent(self.event_id, False)
-        # pso
-        pso = None
-        pipe_state = controller.GetPipelineState()
-        pipe = pipe_state.GetGraphicsPipelineObject()
+        api_state = None
+        pipe_state : rd.PipeState = controller.GetPipelineState()
 
         if API_TYPE == rd.GraphicsAPI.OpenGL:
-            pso = controller.GetGLPipelineState()
+            api_state = controller.GetGLPipelineState()
             # C:\svn_pool\renderdoc\renderdoc\api\replay\gl_pipestate.h
         elif API_TYPE == rd.GraphicsAPI.D3D11:
-            pso = controller.GetD3D11PipelineState()
+            api_state = controller.GetD3D11PipelineState()
         elif API_TYPE == rd.GraphicsAPI.D3D12:
-            pso = controller.GetD3D12PipelineState()
+            api_state = controller.GetD3D12PipelineState()
         elif API_TYPE == rd.GraphicsAPI.Vulkan:
-            pso = controller.GetVulkanPipelineState()
+            api_state = controller.GetVulkanPipelineState()
 
         program_name = ""
 
@@ -2169,27 +2169,27 @@ class Draw(Event):
             if self.isDispatch():
                 if stage != 5:
                     continue
-                shader = pso.computeShader
+                shader = api_state.computeShader
             else:
                 if stage == 0:
-                    shader = pso.vertexShader
+                    shader = api_state.vertexShader
                 elif stage == 1:
                     if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
-                        shader = pso.tessControlShader
+                        shader = api_state.tessControlShader
                     else:
-                        shader = pso.hullShader
+                        shader = api_state.hullShader
                 elif stage == 2:
                     if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
-                        shader = pso.tessEvalShader
+                        shader = api_state.tessEvalShader
                     else:
-                        shader = pso.domainShader
+                        shader = api_state.domainShader
                 elif stage == 3:
-                    shader = pso.geometryShader
+                    shader = api_state.geometryShader
                 elif stage == 4:
                     if API_TYPE == rd.GraphicsAPI.OpenGL or API_TYPE == rd.GraphicsAPI.Vulkan:
-                        shader = pso.fragmentShader
+                        shader = api_state.fragmentShader
                     else:
-                        shader = pso.pixelShader
+                        shader = api_state.pixelShader
                 elif stage == 5:
                     continue
 
@@ -2202,17 +2202,17 @@ class Draw(Event):
                     program_name = get_resource_name(controller, shader.programResourceId)
                     short_shader_name = get_resource_name(controller, shader.shaderResourceId)
                     shader_name = program_name + '_' + short_shader_name
-                elif hasattr(pso, 'pipelineResourceId'):
+                elif hasattr(api_state, 'pipelineResourceId'):
                     # DX12
-                    program_name = get_resource_name(controller, pso.pipelineResourceId)
-                    program_name = program_name.replace('Pipeline_State', 'pso')
+                    program_name = get_resource_name(controller, api_state.pipelineResourceId)
+                    program_name = program_name.replace('Pipeline_State', 'api_state')
                     short_shader_name = get_resource_name(controller, shader_id)
                     shader_name = program_name + '_' + short_shader_name
-                elif hasattr(pso, 'graphics') or hasattr(pso, 'compute'):
+                elif hasattr(api_state, 'graphics') or hasattr(api_state, 'compute'):
                     # Vulkan
-                    p = pso.graphics or pso.graphics
+                    p = api_state.graphics or api_state.graphics
                     program_name = get_resource_name(controller, p.pipelineResourceId)
-                    program_name = program_name.replace('Pipeline', 'pso')
+                    program_name = program_name.replace('Pipeline', 'api_state')
                     short_shader_name = get_resource_name(controller, shader_id)
                     # .replace('Shader_Module', 'shader')
                     if 'Shader_Module' in short_shader_name:
@@ -2262,18 +2262,6 @@ class Draw(Event):
                     for sampler in samplers:
                         print(sampler)
 
-                if self.color_buffers and self.color_buffers[0] != rd.ResourceId.Null():
-                    blends = pipe_state.GetColorBlends()
-                    for blend in blends:
-                        if blend.enabled:
-                            self.alpha_enabled = True
-
-                        if blend.writeMask & 0b0001: self.write_mask[0] = 'R'
-                        if blend.writeMask & 0b0010: self.write_mask[1] = 'G'
-                        if blend.writeMask & 0b0100: self.write_mask[2] = 'B'
-                        if blend.writeMask & 0b1000: self.write_mask[3] = 'A'
-                        # TODO: support MRT
-                        break
                 # raw txt
                 txt_file_name = get_resource_filename(g_assets_folder / shader_name, 'txt')
 
@@ -2295,7 +2283,7 @@ class Draw(Event):
                         else:
                             targets = controller.GetDisassemblyTargets(True)
                             for t in targets:
-                                highlevel_shader = controller.DisassembleShader(pipe, refl, t)
+                                highlevel_shader = controller.DisassembleShader(pipe_state.GetGraphicsPipelineObject(), refl, t)
                                 break
                             lang = '--vulkan'
 
@@ -2314,7 +2302,7 @@ class Draw(Event):
                     else:
                         targets = controller.GetDisassemblyTargets(True)
                         for t in targets:
-                            highlevel_shader = controller.DisassembleShader(pipe, refl, t)
+                            highlevel_shader = controller.DisassembleShader(pipe_state.GetGraphicsPipelineObject(), refl, t)
                             break
 
                     with open(html_file_name, 'w') as fp:
@@ -2333,23 +2321,44 @@ class Draw(Event):
                 # struct State
 
                 # TODO: deal with other resources, (atomicBuffers, uniformBuffers, shaderStorageBuffers, images, transformFeedback etc)
-                if hasattr(pso, 'textures') and not self.textures:
-                    for idx, sampler in enumerate(pso.samplers):
+                if hasattr(api_state, 'textures') and not self.textures:
+                    for idx, sampler in enumerate(api_state.samplers):
                         # TODO: why is sampler always zero?
                         resource_id = sampler.resourceId
                         if resource_id == rd.ResourceId.Null():
                             continue
                         # print(sampler.minLOD)
 
-                    for idx, texture in enumerate(pso.textures):
+                    for idx, texture in enumerate(api_state.textures):
                         resource_id = texture.resourceId
                         if resource_id == rd.ResourceId.Null():
                             continue
                         g_frame.textures.add(resource_id)
                         self.textures.append(resource_id)
-        self.pso_key = program_name
+        self.state_key = program_name
 
-        if self.pso_key != State.current.getName():
+        if API_TYPE == rd.GraphicsAPI.OpenGL and self.depth_buffer:
+            depthState : rd.GLPipe.DepthState = api_state.depthState
+            if depthState.depthEnable: self.depth_state[0] = 'R'
+            if depthState.depthWrites: self.depth_state[1] = 'W'
+
+            stencilState : rd.GLPipe.StencilState = api_state.stencilState
+            self.stencil_enabled = stencilState.stencilEnable
+
+        if self.color_buffers and self.color_buffers[0] != rd.ResourceId.Null():
+            blends = pipe_state.GetColorBlends()
+            for blend in blends:
+                if blend.enabled:
+                    self.alpha_enabled = True
+
+                if blend.writeMask & 0b0001: self.write_mask[0] = 'R'
+                if blend.writeMask & 0b0010: self.write_mask[1] = 'G'
+                if blend.writeMask & 0b0100: self.write_mask[2] = 'B'
+                if blend.writeMask & 0b1000: self.write_mask[3] = 'A'
+                # TODO: support MRT
+                break
+            
+        if self.state_key != State.current.getName():
             # detects a PSO change
             # TODO: this is too ugly
             Pass.current.addState(self)
@@ -2432,8 +2441,9 @@ class Draw(Event):
             # to improve draw-level navigation by pressing 'd' and 'D'
             markdown.write('<br><br>\n\n')
         else:
-            markdown.write('Blends: %s; ' % ("Enabled" if self.alpha_enabled else "Disabled"))
-            markdown.write('Write Mask: %s' % ''.join(self.write_mask))
+            markdown.write('Blends: %s' % ("Enabled" if self.alpha_enabled else "Disabled"))
+            markdown.write('; Depth State: %s' % ''.join(self.depth_state))
+            markdown.write('; Write Mask: %s' % ''.join(self.write_mask))
             markdown.write('\n\n')
 
             # shader section
@@ -2526,7 +2536,7 @@ class Draw(Event):
     draw_id = None
     draw_desc = None # struct DrawcallDescription
     shader_names = None
-    pso_key = None
+    state_key = None
     color_buffers = None
     depth_buffer = None
 
@@ -2670,10 +2680,10 @@ class Frame:
 
         markdown.write('# Frame Overview\n')
 
-        header =       'pass|state|(ms)|marker|blend|mask|draws|instances|verts|z|c\n'
+        header =       'pass|state|(ms)|marker|depth|stencil|color|blend|draws|instances|verts|z|c\n'
         summary_csv.write(header.replace('|',','))
         markdown.write(header)
-        markdown.write('----|-----|---:|------|-----|----|----:|--------:|----:|-|-\n')
+        markdown.write('----|-----|---:|------|-----|-------|-----|-----|----:|--------:|----:|-|-\n')
         overviewText = ''
 
         # TODO: so ugly
@@ -2695,8 +2705,10 @@ class Frame:
             statesSummary = ''
             timeSummary = ''
             markersSummary = ''
-            maskSummary = ''
-            blendSummary = ''
+            depthSummary = '' #----
+            stencilSummary = '' #----
+            colorSummary = '' #----
+            blendSummary = '' #----
             drawsSummary = ''
             callsSummary = ''
             vertsSummary = ''
@@ -2738,8 +2750,10 @@ class Frame:
                     markersSummary += '%s<br>' % s.draws[-1].marker
                     timeSummary += '%.2f<br>' % m
 
-                maskSummary += '%s<br>' % ''.join(s.draws[-1].write_mask)
-                blendSummary += '%s<br>' % ('ON' if s.draws[-1].alpha_enabled else '')
+                depthSummary += '%s<br>' % ''.join(s.draws[-1].depth_state) #----
+                stencilSummary += '%s<br>' % ('ON' if s.draws[-1].stencil_enabled else '') #----
+                colorSummary += '%s<br>' % ''.join(s.draws[-1].write_mask) #----
+                blendSummary += '%s<br>' % ('ON' if s.draws[-1].alpha_enabled else '')  #----
 
                 summary_csv.write('%s,%s,%.3f,%s,%d,%d,%d,%s,%s\n' %(p.getName(controller).lower(), s.getName(), m, s.draws[-1].marker, 
                     len(s.draws), i, v, 
@@ -2765,8 +2779,10 @@ class Frame:
                 callsSummary += '~%d<br>' % calls
                 vertsSummary += '~%s<br>' % pretty_number(verts)
                 markersSummary += '<br>'
-                maskSummary += '<br>'
-                blendSummary += '<br>'
+                depthSummary += '<br>' #----
+                stencilSummary += '<br>' #----
+                colorSummary += '<br>' #----
+                blendSummary += '<br>' #----
                 timeSummary += '~%.2f<br>' % time
 
             # total stats
@@ -2803,9 +2819,13 @@ class Frame:
                     else:
                         c_info += self.getImageLinkOrNothing(c)
                     
-            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
+            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
             (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, 
-                markersSummary, blendSummary, maskSummary,
+                markersSummary, 
+                depthSummary, #----
+                stencilSummary, #----
+                colorSummary, #----
+                blendSummary, #----
                 drawsSummary, instancesSummary, vertsSummary, self.getImageLinkOrNothing(z_filename), c_info))
         
         uniqueStateCounter = len(uniqueStateCounters)
@@ -2815,7 +2835,7 @@ class Frame:
         if has_copy_state:
             # remove "Copy" state
             uniqueStateCounter -= 1            
-        overviewText = ('%s|%s|%s|''|''|''|[%s](api_short.txt)|%s|%s|%s|%s\n' % 
+        overviewText = ('%s|%s|%s|''|''|''|''|''|[%s](api_short.txt)|%s|%s|%s|%s\n' % 
         ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, pretty_number(totalVerts), '', '')) + overviewText
         
         markdown.write(overviewText)
@@ -3264,9 +3284,9 @@ def get_cbuffer_contents(controller, stage, shader_name, refl, program_name):
 
     contents = ''
 
-    pso = pipe.GetGraphicsPipelineObject()
+    api_state = pipe.GetGraphicsPipelineObject()
     if stage == rd.ShaderStage.Compute:
-        pso = pipe.GetComputePipelineObject()
+        api_state = pipe.GetComputePipelineObject()
 
     shader = pipe.GetShader(stage)
 
@@ -3285,7 +3305,7 @@ def get_cbuffer_contents(controller, stage, shader_name, refl, program_name):
     for slot in range(0, 4):
         cb = pipe.GetConstantBuffer(stage, slot, 0)
 
-        cbufferVars = controller.GetCBufferVariableContents(pso,
+        cbufferVars = controller.GetCBufferVariableContents(api_state,
                                                             pipe.GetShader(stage),
                                                             pipe.GetShaderEntryPoint(stage), slot,
                                                             cb.resourceId, cb.byteOffset, cb.byteSize)
