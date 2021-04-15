@@ -2064,8 +2064,7 @@ class Draw(Event):
         self.gpu_duration = 0
 
         self.alpha_enabled = False
-        self.stencil_enabled = False
-        self.depth_state = [' '] * 2
+        self.depth_state = [' '] * 3
         self.write_mask = [' '] * 4
 
         if self.event_id in g_draw_durations:
@@ -2343,7 +2342,7 @@ class Draw(Event):
             if depthState.depthWrites: self.depth_state[1] = 'W'
 
             stencilState : rd.GLPipe.StencilState = api_state.stencilState
-            self.stencil_enabled = stencilState.stencilEnable
+            if stencilState.stencilEnable: self.depth_state[2] = '+S'
 
         if self.color_buffers and self.color_buffers[0] != rd.ResourceId.Null():
             blends = pipe_state.GetColorBlends()
@@ -2680,10 +2679,10 @@ class Frame:
 
         markdown.write('# Frame Overview\n')
 
-        header =       'pass|state|(ms)|marker|depth|stencil|color|blend|draws|instances|verts|z|c\n'
+        header =       'pass|state|(ms)|marker|depth|color|blend|draws|instances|verts|z|c\n'
         summary_csv.write(header.replace('|',','))
         markdown.write(header)
-        markdown.write('----|-----|---:|------|-----|-------|-----|-----|----:|--------:|----:|-|-\n')
+        markdown.write('----|-----|---:|------|-----|-----|-----|----:|--------:|----:|-|-\n')
         overviewText = ''
 
         # TODO: so ugly
@@ -2706,7 +2705,6 @@ class Frame:
             timeSummary = ''
             markersSummary = ''
             depthSummary = '' #----
-            stencilSummary = '' #----
             colorSummary = '' #----
             blendSummary = '' #----
             drawsSummary = ''
@@ -2751,7 +2749,6 @@ class Frame:
                     timeSummary += '%.2f<br>' % m
 
                 depthSummary += '%s<br>' % ''.join(s.draws[-1].depth_state) #----
-                stencilSummary += '%s<br>' % ('ON' if s.draws[-1].stencil_enabled else '') #----
                 colorSummary += '%s<br>' % ''.join(s.draws[-1].write_mask) #----
                 blendSummary += '%s<br>' % ('ON' if s.draws[-1].alpha_enabled else '')  #----
 
@@ -2780,7 +2777,6 @@ class Frame:
                 vertsSummary += '~%s<br>' % pretty_number(verts)
                 markersSummary += '<br>'
                 depthSummary += '<br>' #----
-                stencilSummary += '<br>' #----
                 colorSummary += '<br>' #----
                 blendSummary += '<br>' #----
                 timeSummary += '~%.2f<br>' % time
@@ -2819,11 +2815,10 @@ class Frame:
                     else:
                         c_info += self.getImageLinkOrNothing(c)
                     
-            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
+            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
             (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, 
                 markersSummary, 
                 depthSummary, #----
-                stencilSummary, #----
                 colorSummary, #----
                 blendSummary, #----
                 drawsSummary, instancesSummary, vertsSummary, self.getImageLinkOrNothing(z_filename), c_info))
@@ -2835,7 +2830,7 @@ class Frame:
         if has_copy_state:
             # remove "Copy" state
             uniqueStateCounter -= 1            
-        overviewText = ('%s|%s|%s|''|''|''|''|''|[%s](api_short.txt)|%s|%s|%s|%s\n' % 
+        overviewText = ('%s|%s|%s|''|''|''|''|[%s](api_short.txt)|%s|%s|%s|%s\n' % 
         ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, pretty_number(totalVerts), '', '')) + overviewText
         
         markdown.write(overviewText)
