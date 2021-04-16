@@ -2341,9 +2341,18 @@ class Draw(Event):
                 depthState : rd.GLPipe.DepthState = api_state.depthState
                 if depthState.depthEnable: self.depth_state[0] = 'R'
                 if depthState.depthWrites: self.depth_state[1] = 'W'
-
                 stencilState : rd.GLPipe.StencilState = api_state.stencilState
                 if stencilState.stencilEnable: self.depth_state[2] = '+S'
+            elif API_TYPE == rd.GraphicsAPI.Vulkan and self.depth_buffer:
+                depthState : rd.VKPipe.DepthStencil = api_state.depthStencil
+                if depthState.depthTestEnable: self.depth_state[0] = 'R'
+                if depthState.depthWriteEnable: self.depth_state[1] = 'W'
+                if depthState.stencilTestEnable: self.depth_state[2] = '+S'
+            elif API_TYPE == rd.GraphicsAPI.D3D11 or API_TYPE == rd.GraphicsAPI.D3D12 and self.depth_buffer:
+                depthState = api_state.outputMerger.depthStencilState
+                if depthState.depthEnable: self.depth_state[0] = 'R'
+                if depthState.depthWrites: self.depth_state[1] = 'W'
+                if depthState.stencilEnable: self.depth_state[2] = '+S'
 
             if self.color_buffers and self.color_buffers[0] != rd.ResourceId.Null():
                 blends = pipe_state.GetColorBlends()
