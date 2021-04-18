@@ -2204,14 +2204,14 @@ class Draw(Event):
                 elif hasattr(api_state, 'pipelineResourceId'):
                     # DX12
                     program_name = get_resource_name(controller, api_state.pipelineResourceId)
-                    program_name = program_name.replace('Pipeline_State', 'api_state')
+                    program_name = program_name.replace('Pipeline_State', 'pso')
                     short_shader_name = get_resource_name(controller, shader_id)
                     shader_name = program_name + '_' + short_shader_name
                 elif hasattr(api_state, 'graphics') or hasattr(api_state, 'compute'):
                     # Vulkan
                     p = api_state.graphics or api_state.graphics
                     program_name = get_resource_name(controller, p.pipelineResourceId)
-                    program_name = program_name.replace('Pipeline', 'api_state')
+                    program_name = program_name.replace('Pipeline', 'pso')
                     short_shader_name = get_resource_name(controller, shader_id)
                     # .replace('Shader_Module', 'shader')
                     if 'Shader_Module' in short_shader_name:
@@ -2330,7 +2330,28 @@ class Draw(Event):
                             continue
                         g_frame.textures.add(resource_id)
                         self.textures.append(resource_id)
+                elif API_TYPE == rd.GraphicsAPI.Vulkan and not self.textures:
+                    for desc_set in api_state.graphics.descriptorSets:
+                        for binding in desc_set.bindings:
+                            for bind in binding.binds:
+                                # print(bind.resourceResourceId, str(bind.viewFormat))
+                                resource_id = bind.resourceResourceId
+                                if resource_id == rd.ResourceId.Null():
+                                    continue
+                                if not get_texture_info(controller, resource_id):
+                                    continue                                
+                                g_frame.textures.add(resource_id)
+                                self.textures.append(resource_id)
 
+                    for sampler in shader.reflection.readOnlyResources:
+                        pass
+                        # print(sampler)
+                        # srv = api_state.images[sampler.bind]
+                        # resource_id = srv.resourceId
+                        # if resource_id == rd.ResourceId.Null():
+                        #     continue
+                        # g_frame.textures.add(resource_id)
+                        # self.textures.append(resource_id)
                 elif hasattr(api_state, 'textures') and not self.textures:
                     mapping = shader.bindpointMapping # struct ShaderBindpointMapping
 
@@ -2508,9 +2529,6 @@ class Draw(Event):
                 for idx, resource_id in enumerate(self.textures):
                     if not resource_id or resource_id == rd.ResourceId.Null():
                         continue
-                    # if idx > 7: # magic
-                        # TODO: uglllllly
-                        # break
                     resource_name = get_resource_name(controller, resource_id)
                     file_name = get_resource_filename(resource_name, IMG_EXT)
                     self.writeTextureMarkdown(markdown, controller, 't%s: %s' % (idx, resource_name), resource_id, file_name)
