@@ -2320,7 +2320,20 @@ class Draw(Event):
                 # struct State
 
                 # TODO: deal with other resources, (atomicBuffers, uniformBuffers, shaderStorageBuffers, images, transformFeedback etc)
-                if hasattr(api_state, 'textures') and not self.textures:
+                if API_TYPE == rd.GraphicsAPI.D3D11:
+                    mapping = shader.bindpointMapping # struct ShaderBindpointMapping
+                    for sampler in mapping.readOnlyResources:
+                        # print(sampler.bind, sampler.bindset)
+                        srv = shader.srvs[sampler.bind]
+                        resource_id = srv.resourceResourceId
+                        if resource_id == rd.ResourceId.Null():
+                            continue
+                        g_frame.textures.add(resource_id)
+                        self.textures.append(resource_id)
+
+                elif hasattr(api_state, 'textures') and not self.textures:
+                    mapping = shader.bindpointMapping # struct ShaderBindpointMapping
+
                     for idx, sampler in enumerate(api_state.samplers):
                         # TODO: why is sampler always zero?
                         resource_id = sampler.resourceId
