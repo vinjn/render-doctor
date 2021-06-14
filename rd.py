@@ -2691,23 +2691,23 @@ class Frame:
 
         markdown.write('# Resource Overview\n')
 
-        markdown.write('name|type|usage|dimension|mips|format|channels|bytes|tips|preview\n')
-        markdown.write('----|----|-----|--------:|---:|------|--------|-----|----|-------\n')
+        markdown.write('name|type|usage|dimension|mip|format|bytes|tips|preview\n')
+        markdown.write('----|----|-----|--------:|--:|------|-----|----|-------\n')
         
         for tip in texture_tips:
             file_name = get_resource_filename(get_resource_name(controller, tip.resource_id), IMG_EXT)
             tex_info = tip.info
             export_texture(controller, tex_info.resourceId, file_name)
             texType = '%s' % rd.TextureType(tex_info.type)
+            texType.replace('TextureType.Texture', '').replace('Array','[]')
             category = '%s' % rd.TextureCategory(tex_info.creationFlags)
-            markdown.write('%s|%s|%s|%s|%d|%s|%d|%s|%s|%s\n' % (
+            markdown.write('%s|%s|%s|%s|%d|%s|%s|%s|%s\n' % (
                 tip.name,
-                texType.replace('TextureType.Texture', ''),
+                texType,
                 category.replace('TextureCategory.', '').replace('ShaderRead','T').replace('ColorTarget','C').replace('DepthTarget','Z').replace('|',''),
                 '%dx%d' % (tex_info.width, tex_info.height),
                 tex_info.mips,
                 tip.format,
-                tip.channels,
                 pretty_number(tex_info.byteSize),
                 '<br>'.join(tip.tips),
                 '![](%s class="lazyload" data-src="%s" width="%s")' % ('../src/logo.png', file_name, '20%')
