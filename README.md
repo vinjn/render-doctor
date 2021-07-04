@@ -18,6 +18,11 @@
 - 点击 `Run`，运气好的话你会得到一个与 rdc 文件同名的报告文件夹。
 - 将报告文件夹复制到 `render-doctotor` 目录，打开其中的 `index.html` 即可。
 
+## Sample Reports
+
+- [UE4's Third Person sample](https://www.vinjn.com/rd-samples/ue4-third-person-2021-04-11/)
+- [Unity's default URP sample](https://www.vinjn.com/rd-samples/urp-test-gles/)
+
 ## Implementataion details
 
 ### renderdoc python api

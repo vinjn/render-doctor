@@ -2704,12 +2704,13 @@ class Frame:
             tex_info = tip.info
             export_texture(controller, tex_info.resourceId, file_name)
             texType = '%s' % rd.TextureType(tex_info.type)
-            texType.replace('TextureType.Texture', '').replace('Array','[]')
+            texType = texType.replace('TextureType.Texture', '').replace('Array','[]')
             category = '%s' % rd.TextureCategory(tex_info.creationFlags)
+            category = category.replace('TextureCategory.', '').replace('ShaderRead','T').replace('ColorTarget','C').replace('DepthTarget','Z').replace('|',''),
             markdown.write('%s|%s|%s|%s|%d|%s|%s|%s|%s\n' % (
                 tip.name,
                 texType,
-                category.replace('TextureCategory.', '').replace('ShaderRead','T').replace('ColorTarget','C').replace('DepthTarget','Z').replace('|',''),
+                category,
                 '%dx%d' % (tex_info.width, tex_info.height),
                 tex_info.mips,
                 tip.format,
