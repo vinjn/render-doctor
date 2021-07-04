@@ -1,11 +1,12 @@
 # RenderDoc Python console, powered by python 3.6.4.
+# https://www.python.org/ftp/python/3.6.4/python-3.6.4-amd64.exe
+
 # The 'pyrenderdoc' object is the current CaptureContext instance.
 # The 'renderdoc' and 'qrenderdoc' modules are available.
 # Documentation is available: https://renderdoc.org/docs/python_api/index.html
 
 # https://casual-effects.com/markdeep/features.md.html
 
-# https://www.python.org/ftp/python/3.6.4/python-3.6.4-amd64.exe
 # https://renderdoc.org/docs/python_api/renderdoc/index.html
 
 # cpu side fetch
@@ -1848,15 +1849,15 @@ class Pass:
         if self.name:
             return self.name
 
-        pass_info = ""
+        pass_info = ''
         if self.getLastDraw():
             # TODO: assume every draws share the same set of targets
             pass_info = self.getLastDraw().getPassSummary(controller)
 
         if not pass_info:
-            self.name = "Pass%d" % (self.pass_id)
+            self.name = 'Pass%d' % (self.pass_id)
         else:
-            self.name = "Pass%d_%s" % (self.pass_id, pass_info)
+            self.name = 'Pass%d_%s' % (self.pass_id, pass_info)
 
         return self.name
 
@@ -2192,6 +2193,7 @@ class Draw(Event):
                 elif stage == 5:
                     continue
 
+            # TODO: improve the logic among program_name, short_shader_name and shader_name
             if shader_id != rd.ResourceId.Null():
                 # api_full_log.write(str(shader_id))
                 # api_full_log.write('\n')
@@ -2436,6 +2438,7 @@ class Draw(Event):
 
     def writeTextureMarkdown(self, markdown, controller, caption_suffix, resource_id, texture_file_name):
         texture_info = get_texture_info(controller, resource_id)
+        if not texture_info: return
         depth_info = ''
         arraysize_info = ''
         mips_info = ''
@@ -2589,6 +2592,8 @@ def export_texture(controller, resource_id, file_name):
 
     file_name = str(file_path)
     texture_info = get_texture_info(controller, resource_id)
+    if not texture_info:
+        return
 
     texsave = rd.TextureSave()
     fmt = rd.ResourceFormat(texture_info.format).Name()
@@ -2720,10 +2725,10 @@ class Frame:
 
         markdown.write('# Frame Overview\n')
 
-        header =       'pass|state|(ms)|marker|depth|color|blend|draws|instances|verts|z|c\n'
+        header =       'pass|state|draw|vertex|(ms)|marker|depth|color|blend|inst|z|c\n'
         summary_csv.write(header.replace('|',','))
         markdown.write(header)
-        markdown.write('----|-----|---:|------|-----|-----|-----|----:|--------:|----:|-|-\n')
+        markdown.write('----|-----|---:|-----:|---:|------|-----|-----|-----|---:|-|-\n')
         overviewText = ''
 
         # TODO: so ugly
@@ -2793,17 +2798,18 @@ class Frame:
                 colorSummary += '%s<br>' % ''.join(s.draws[-1].write_mask) #----
                 blendSummary += '%s<br>' % ('ON' if s.draws[-1].alpha_enabled else '')  #----
 
-                summary_csv.write('%s,%s,%.3f,%s,%d,%d,%d,%s,%s\n' %(p.getName(controller).lower(), s.getName(), m, s.draws[-1].marker, 
-                    len(s.draws), i, v, 
+                summary_csv.write('%s,%s,%d,%d,%.3f,%s,%d,%s,%s\n' %(p.getName(controller).lower(), s.getName(), len(s.draws), v,
+                    m, s.draws[-1].marker, 
+                    i,
                     s.vs_name or s.cs_name, s.ps_name or ''))
 
                 time += m
                 calls += c
                 verts += v
-                if s.getName() is 'Clear':
+                if s.getName() == 'Clear':
                     # Clear is not a "correct" State..
                     has_clear_state = True
-                elif s.getName() is 'Copy':
+                elif s.getName() == 'Copy':
                     # Copy is not a "correct" State..
                     has_copy_state = True
                 else:
@@ -2857,12 +2863,13 @@ class Frame:
                         c_info += self.getImageLinkOrNothing(c)
                     
             overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
-            (p.getName(controller), p.getName(controller).lower(), statesSummary, timeSummary, 
+            (p.getName(controller), p.getName(controller).lower(), statesSummary, drawsSummary, vertsSummary, 
+                timeSummary, 
                 markersSummary, 
                 depthSummary, #----
                 colorSummary, #----
                 blendSummary, #----
-                drawsSummary, instancesSummary, vertsSummary, self.getImageLinkOrNothing(z_filename), c_info))
+                instancesSummary, self.getImageLinkOrNothing(z_filename), c_info))
         
         uniqueStateCounter = len(uniqueStateCounters)
         if has_clear_state:
@@ -2871,8 +2878,9 @@ class Frame:
         if has_copy_state:
             # remove "Copy" state
             uniqueStateCounter -= 1            
-        overviewText = ('%s|%s|%s|''|''|''|''|[%s](api_short.txt)|%s|%s|%s|%s\n' % 
-        ('total: %d' % totalPasses, 'total: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%.2f' % totalTime, '%d' % totalDraws, '%d' % totalInstances, pretty_number(totalVerts), '', '')) + overviewText
+        overviewText = ('%s|%s|[%s](api_short.txt)|%s|%s|''|''|''|''|%s|%s|%s\n' % 
+        ('sum: %d' % totalPasses, 'sum: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%d' % totalDraws, pretty_number(totalVerts), '%.2f' % totalTime, \
+             '%d' % totalInstances,  '', '')) + overviewText
         
         markdown.write(overviewText)
         markdown.write('\n')
