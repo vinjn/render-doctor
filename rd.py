@@ -2597,7 +2597,7 @@ def export_texture(controller, resource_id, file_name):
 
     texsave = rd.TextureSave()
     fmt = rd.ResourceFormat(texture_info.format).Name()
-    if texture_info.format.compCount == 3 or 'A2' in fmt or 'A16' in fmt:
+    if texture_info.format.compCount == 3 or texture_info.format.compCount == 1 or 'A2' in fmt or 'A16' in fmt:
         texsave.alpha = rd.AlphaMapping.Discard
     else:
         texsave.alpha = rd.AlphaMapping.BlendToCheckerboard
@@ -2705,12 +2705,12 @@ class Frame:
             export_texture(controller, tex_info.resourceId, file_name)
             texType = '%s' % rd.TextureType(tex_info.type)
             texType = texType.replace('TextureType.Texture', '').replace('Array','[]')
-            category = '%s' % rd.TextureCategory(tex_info.creationFlags)
-            category = category.replace('TextureCategory.', '').replace('ShaderRead','T').replace('ColorTarget','C').replace('DepthTarget','Z').replace('|',''),
+            usages = '%s' % rd.TextureCategory(tex_info.creationFlags)
+            usages = usages.replace('TextureCategory.', '').replace('ShaderRead','T').replace('ColorTarget','C').replace('DepthTarget','Z').replace('|',''),
             markdown.write('%s|%s|%s|%s|%d|%s|%s|%s|%s\n' % (
                 tip.name,
                 texType,
-                category,
+                '|'.join(usages),
                 '%dx%d' % (tex_info.width, tex_info.height),
                 tex_info.mips,
                 tip.format,
@@ -2766,8 +2766,8 @@ class Frame:
             calls = 0
             verts = 0
             for s in p.states:
-                statesSummary += '[%s](#%s/%s)<br>' % (s.getName(), p.getName(controller).lower(), s.getUniqueName().lower())
-                drawsSummary += '[%d](%s.html)<br>' % (len(s.draws), s.getUniqueName())
+                statesSummary += '[%s](%s.html)<br>' % (s.getName(), s.getUniqueName())
+                drawsSummary += '[(%d~%d)](#%s/%s)%d<br>' % (s.draws[0].draw_id, s.draws[-1].draw_id, p.getName(controller).lower(), s.getUniqueName().lower(), len(s.draws))
 
                 c = 0
                 v = 0
@@ -3032,21 +3032,22 @@ class Frame:
         markdown.write("**render-doctor %s**\n\n" % (rdc_file))
 
         self.writeFrameOverview(markdown, controller)
-        self.writeShaderOverview(markdown, controller)
         self.writeResourceOverview(markdown, controller)
         self.writeAPIOverview(markdown, controller)
 
         for p in self.passes:
             p.writeIndexHtml(markdown, controller)
 
-        markdown.write("## Usage\n\n")
+        self.writeShaderOverview(markdown, controller)
+
+        markdown.write("# Usage\n\n")
         markdown.write("  * Press `p` / `shift+p` to jump between Passes\n")
         markdown.write("  * Press `s` / `shift+s` to jump between States\n")
         markdown.write("  * Press `d` / `shift+d` to jump between Draws\n")
         
         markdown.write('\n--------\n')
         
-        markdown.write("## Summary\n\n")
+        markdown.write("# Summary\n\n")
         if WRITE_PSO_DAG:
             markdown.write("  * Experimental feature [pipeline dag](dag.html)\n")
         markdown.write("  * RDC: %s\n" % rdc_file)
