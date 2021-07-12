@@ -2241,17 +2241,16 @@ class Draw(Event):
                     # const_buffer--%4d.html
                     resource_name = 'const_buffer--%04d' % (self.draw_id)
                     file_name = get_resource_filename(g_assets_folder / resource_name, 'html')
-                    if not Path(file_name).exists():
-                        with open(file_name, 'w') as fp:
-                            fp.write(markdeep_head)
-                            for s in range(0, rd.ShaderStage.Count):
-                                # TODO:
-                                if self.shader_cb_contents[s]:
-                                    fp.write('# %s\n' % (ShaderStage(s).name)) # shader type head "VS", "FS" etc
-                                    fp.write('```glsl\n')
-                                    fp.write(self.shader_cb_contents[s])
-                                    fp.write('\n```\n')
-                                    fp.write("\n\n")
+                    with open(file_name, 'w') as fp:
+                        fp.write(markdeep_head)
+                        for s in range(0, rd.ShaderStage.Count):
+                            # TODO:
+                            if self.shader_cb_contents[s]:
+                                fp.write('# %s\n' % (ShaderStage(s).name)) # shader type head "VS", "FS" etc
+                                fp.write('```glsl\n')
+                                fp.write(self.shader_cb_contents[s])
+                                fp.write('\n```\n')
+                                fp.write("\n\n")
                 if False:
                     # TODO: sadly ShaderBindpointMapping is always empty :(
                     mapping = shader.bindpointMapping # struct ShaderBindpointMapping
