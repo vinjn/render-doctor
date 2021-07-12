@@ -2767,7 +2767,7 @@ class Frame:
             verts = 0
             for s in p.states:
                 statesSummary += '[%s](%s.html)<br>' % (s.getName(), s.getUniqueName())
-                drawsSummary += '[(%d~%d)](#%s/%s)%d<br>' % (s.draws[0].draw_id, s.draws[-1].draw_id, p.getName(controller).lower(), s.getUniqueName().lower(), len(s.draws))
+                drawsSummary += '[%d~%d](#%s/%s)!%d<br>' % (s.draws[0].draw_id, s.draws[-1].draw_id, p.getName(controller).lower(), s.getUniqueName().lower(), len(s.draws))
 
                 c = 0
                 v = 0
