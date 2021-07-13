@@ -51,6 +51,9 @@ def run(start, end, dir:"Output Foloder"="d:\\dump", debug:"For debug"=0):
         raise RuntimeError("Error: Output directory is NOT exist.")
 
     count = 0
+    json_object = {
+        'inputs': []
+    }
     calls = api_log_accessor.get_calls()
     for call in calls:
         apicall = call.get_description()
@@ -59,16 +62,14 @@ def run(start, end, dir:"Output Foloder"="d:\\dump", debug:"For debug"=0):
 
             # only care drawIndexed and drawIndexedInstanced
             if  (apicall["name"] == "DrawIndexedInstanced" or apicall["name"] == "DrawIndexed") and count >= start and count <= end:
-                file = open((ROOT_FOLDER + "\\{}.json").format(count), "w")
+                file_name = (ROOT_FOLDER + "\\{}.json").format(count)
+                file = open(file_name, "w")
                 folder = (ROOT_FOLDER + "\\{}\\").format(count)
 
                 bindings = call.get_bindings()
 
-                file.write(json.dumps(call.get_description()))
-                file.write('\n')
-
-                file.write(json.dumps(bindings["metadata"]))
-                file.write('\n')
+                json_object['description'] = call.get_description()
+                json_object['metadata'] = bindings["metadata"]
 
                 # dump textures and cbv/vbv/ibv
                 for v in bindings["inputs"]:
@@ -78,14 +79,16 @@ def run(start, end, dir:"Output Foloder"="d:\\dump", debug:"For debug"=0):
                             DumpBufferByDrawcall(folder, call, v, desc["resource_id"], desc["resource_type"] == "texture")
                         else:
                             DumpBufferByResource(ROOT_FOLDER, call, v, desc["resource_id"], desc["view_type"], desc["resource_type"] == "texture")
-                        file.write(json.dumps(desc))
-                        file.write('\n')
+                        json_object['inputs'].append(desc)
 
                 # execution = bindings["execution"]
+                # json_object['program'].append(execution["program"].get_description())
+
                 # file.write(json.dumps(execution["program"].get_description()))
                 # file.write(execution["program"].get_il_source("vertex", "isa"))
-
+                file.write(json.dumps(json_object, indent=4))
                 file.close()
+                print(file_name)
 
 #
 def desc():
