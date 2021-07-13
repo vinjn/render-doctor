@@ -23,6 +23,9 @@ def getTypes(format):
         return (COMPONENT_TYPE_UNSIGNED_BYTE, 'VEC4')
     if format == 'R8G8B8A8_UINT':
         return (COMPONENT_TYPE_UNSIGNED_INT, 'VEC4')
+    if format == 'R8G8B8A8_UNORM':
+        return (COMPONENT_TYPE_UNSIGNED_BYTE, 'VEC4')
+    return (None, None)
 
 def process_gpa_json(filename):
     dir_name = path.dirname(filename)
@@ -38,6 +41,10 @@ def process_gpa_json(filename):
                 'nodes': [0]
             }
         ],
+        "asset": {
+            "generator": "glTF Tools for Unity",
+            "version": "2.0"
+        },
     }
 
     with open(filename) as f:
@@ -56,6 +63,7 @@ def process_gpa_json(filename):
                 resource_id_mapper[input['resource_id']] = idx
                 idx += 1
 
+        IndexCount = data['description']['arguments'][0]['value']
         view_id = 0
         for vertex_buffer in data['metadata']['input_geometry']['vertex_buffers']:
             buffer_id = resource_id_mapper[vertex_buffer['buffer']]
@@ -65,16 +73,16 @@ def process_gpa_json(filename):
 
                 gltf_obj['bufferViews'].append({
                     'buffer': buffer_id,
-                    'offset': layout['offset'],
+                    'byteOffset': int(layout['offset']),
                     'byteLength': gltf_obj['buffers'][buffer_id]['byteLength'],
                 })
 
-                (componentType, type) = getTypes(format)
+                (componentType, Type) = getTypes(format)
                 gltf_obj['accessors'].append({
                     'bufferView': view_id,
                     'componentType': componentType,
-                    'count': 2549,
-                    'type': type
+                    'count': int(IndexCount / 3),
+                    'type': Type
                 })
 
                 view_id += 1
