@@ -38,5 +38,7 @@ def process_mesh(in_bin_filename, in_obj_filename, out_filename):
 
     openmesh.write_mesh(out_filename, mesh, vertex_normal = True, vertex_tex_coord=True)
 
-process_mesh('d:/dump/VBV/4169.bin', 'ggs/sol-body.obj', 'ggs/sol-body-with-uv.obj')
-process_mesh('d:/dump/VBV/4551.bin', 'ggs/sol-head.obj', 'ggs/sol-head-uv.obj')
+# process_mesh('d:/dump/VBV/4169.bin', '../ggs/sol-body.obj', '../ggs/sol-body-with-uv.obj')
+# process_mesh('d:/dump/VBV/4551.bin', '../ggs/sol-head.obj', '../ggs/sol-head-uv.obj')
+process_mesh('d:/dump/VBV/8671.bin', '../ggs/chipp/head.obj', '../ggs/chipp/head-uv.obj')
+process_mesh('d:/dump/VBV/7995.bin', '../ggs/chipp/body.obj', '../ggs/chipp/body-uv.obj')

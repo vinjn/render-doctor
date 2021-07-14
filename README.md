@@ -33,3 +33,7 @@ https://casual-effects.com/markdeep/features.md.html
 
 ### mermaid
 https://mermaid-js.github.io/mermaid/#/flowchart?id=flowcharts-basic-syntax
+
+
+## FBX Python SDK
+https://www.autodesk.com/developer-network/platform-technologies/fbx-sdk-2020-2-1
