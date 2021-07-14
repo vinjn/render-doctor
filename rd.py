@@ -38,11 +38,9 @@ os.environ["PATH"] += os.pathsep + os.path.abspath('../renderdoc/x64/Development
 
 import renderdoc as rd
 
-#######################################
-### Config Begin
-#######################################
+# config <----> %APPDATA%/rd.json
 config = {
-    'WRITE_DETALS' : False,
+    'MINIMALIST' : True,
     'WRITE_MALIOC' : True,
     'WRITE_CONST_BUFFER' : True,
     'WRITE_PIPELINE' : True,
@@ -51,15 +49,8 @@ config = {
     'WRITE_DEPTH_BUFFER' : True,
     'WRITE_PSO_DAG' : False,
     'WRITE_SINGLE_COLOR' : False,
+    'WRITE_ALL_DRAWS' : False,
 }
-
-def get_config():
-    global config
-    return config
-
-#######################################
-### Config End
-########################################
 
 api_full_log = None
 api_short_log = None
@@ -1751,7 +1742,7 @@ class TextureTip:
             # white-list, "2D" textures, used as HUD, UI etc.
             pass
         elif self.info.creationFlags == rd.TextureCategory.ShaderRead:
-            if get_config()['WRITE_SINGLE_COLOR']:
+            if config['WRITE_SINGLE_COLOR']:
                 # read-only texture
                 pixels = controller.GetTextureData(resource_id, rd.Subresource(0, 0, 0))
 
@@ -1946,6 +1937,11 @@ class State:
         if draw_count == 0:
             return
 
+        if config['MINIMALIST']:
+            # MINIMALIST only cares about last draw
+            self.draws[-1].writeIndexHtml(markdown, controller)
+            return
+
         if draw_count == 1:
             self.draws[0].writeIndexHtml(markdown, controller)
         elif draw_count == 2:
@@ -1965,13 +1961,18 @@ class State:
             d.writeDetailHtml(markdown, controller)
 
     def exportResources(self, controller):
-        if get_config()['WRITE_DETALS']:
+        if config['WRITE_ALL_DRAWS']:
             for d in self.draws:
                 d.exportResources(controller)
         else:
             draw_count = len(self.draws)
             if draw_count == 0:
                 return
+            if config['MINIMALIST']:
+                # MINIMALIST only cares about last draw
+                self.draws[-1].exportResources(controller)
+                return
+             
             if draw_count == 1:
                 self.draws[0].exportResources(controller)
             elif draw_count == 2:
@@ -2111,7 +2112,7 @@ class Draw(Event):
         return self.name.find('Dispatch') != -1
 
     def collectPipeline(self, controller):
-        if not get_config()['WRITE_PIPELINE']:
+        if not config['WRITE_PIPELINE']:
             return
 
         if self.isClear():
@@ -2243,7 +2244,7 @@ class Draw(Event):
                 self.short_shader_names[stage] = short_shader_name
 
             if refl:
-                if get_config()['WRITE_CONST_BUFFER']:
+                if config['WRITE_CONST_BUFFER']:
                     self.shader_cb_contents[stage] = get_cbuffer_contents(controller, stage, self.shader_names[stage], refl, program_name)
 
                     # const_buffer--%4d.html
@@ -2296,7 +2297,7 @@ class Draw(Event):
                             lang = '--vulkan'
 
                         malioc_exe = g_assets_folder / '../' / 'mali_offline_compiler/malioc.exe'
-                        if get_config()['WRITE_MALIOC'] and  malioc_exe.exists():
+                        if config['WRITE_MALIOC'] and  malioc_exe.exists():
                             args = [
                                 str(malioc_exe),
                                 shader_flags[stage],
@@ -2480,7 +2481,6 @@ class Draw(Event):
             markdown.write("`event_%04d %s`\n\n" % (ev.eventId, event_type.name))
 
         markdown.write('\n\n--------\n\n')
-        markdown.write('\n\n--------\n\n')
 
     def writeIndexHtml(self, markdown, controller):
         global g_assets_folder
@@ -2506,7 +2506,7 @@ class Draw(Event):
                     markdown.write("%s: %s " % (ShaderStage(stage).name, linkable_get_resource_filename(self.shader_names[stage], 'html')))
 
             # cb / constant buffer section
-            if get_config()['WRITE_CONST_BUFFER']:
+            if config['WRITE_CONST_BUFFER']:
                 resource_name = 'const_buffer--%04d' % (self.draw_id)
                 file_name = get_resource_filename(resource_name, 'html')
                 markdown.write("CB: %s" % (link_to_file(resource_name, file_name)))
@@ -2515,7 +2515,7 @@ class Draw(Event):
 
         if not self.isDispatch():
             # color buffer section
-            if get_config()['WRITE_COLOR_BUFFER']:
+            if config['WRITE_COLOR_BUFFER']:
                 for idx, resource_id in enumerate(self.color_buffers):
                     if not resource_id or resource_id == rd.ResourceId.Null():
                         continue
@@ -2525,7 +2525,7 @@ class Draw(Event):
                     self.writeTextureMarkdown(markdown, controller, 'c%d: %s' % (idx, resource_name), resource_id, file_name)
             
             # depth buffer section
-            if get_config()['WRITE_DEPTH_BUFFER']:
+            if config['WRITE_DEPTH_BUFFER']:
                 if self.depth_buffer != rd.ResourceId.Null():
                     resource_id = self.depth_buffer
                     resource_name = get_resource_name(controller, resource_id)
@@ -2534,8 +2534,8 @@ class Draw(Event):
                     self.writeTextureMarkdown(markdown, controller, 'z: %s' % (resource_name), resource_id, file_name)
 
             # texture section
-            markdown.write('\n\n--------\n\n')
-            if not self.isClear() and not self.isCopy() and get_config()['WRITE_TEXTURE']:
+            if not self.isClear() and not self.isCopy() and config['WRITE_TEXTURE']:
+                markdown.write('\n\n--------\n\n')
                 for idx, resource_id in enumerate(self.textures):
                     if not resource_id or resource_id == rd.ResourceId.Null():
                         continue
@@ -2546,18 +2546,18 @@ class Draw(Event):
         # TODO: add UAV / image etc
 
     def exportResources(self, controller):
-        if not get_config()['WRITE_COLOR_BUFFER'] and not get_config()['WRITE_DEPTH_BUFFER'] and not get_config()['WRITE_TEXTURE']:
+        if not config['WRITE_COLOR_BUFFER'] and not config['WRITE_DEPTH_BUFFER'] and not config['WRITE_TEXTURE']:
             return
 
         if API_TYPE == rd.GraphicsAPI.Vulkan and self.isDispatch():
             # on Android devices, Vulkan dispatch calls will likely crash renderdoc, so we skip them
             return
 
-        if get_config()['WRITE_COLOR_BUFFER'] or get_config()['WRITE_DEPTH_BUFFER']:
+        if config['WRITE_COLOR_BUFFER'] or config['WRITE_DEPTH_BUFFER']:
             controller.SetFrameEvent(self.event_id, False)
 
         # WRITE textures
-        if get_config()['WRITE_TEXTURE']:
+        if config['WRITE_TEXTURE']:
             for idx, resource_id in enumerate(self.textures):
                 if resource_id == rd.ResourceId.Null():
                     continue
@@ -2566,16 +2566,16 @@ class Draw(Event):
                 export_texture(controller, resource_id, file_name)
                 
         # WRITE render targtes (aka outputs)
-        if get_config()['WRITE_COLOR_BUFFER']:
+        if config['WRITE_COLOR_BUFFER']:
             for idx, resource_id in enumerate(self.color_buffers):
                 if resource_id != rd.ResourceId.Null():
                     resource_name = get_resource_name(controller, resource_id)
                     file_name = get_resource_filename('%s--%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
-                    if get_config()['WRITE_COLOR_BUFFER']:
+                    if config['WRITE_COLOR_BUFFER']:
                         export_texture(controller, resource_id, file_name)
 
         # depth
-        if get_config()['WRITE_DEPTH_BUFFER'] and self.depth_buffer:
+        if config['WRITE_DEPTH_BUFFER'] and self.depth_buffer:
             resource_id = self.depth_buffer
             if resource_id != rd.ResourceId.Null():
                 resource_name = get_resource_name(controller, resource_id)
@@ -2663,6 +2663,9 @@ class Frame:
         return '![](%s border="2" width="%s")' % (filename, width)
 
     def writeShaderOverview(self, markdown, controller):
+        if not g_frame.shaders:
+            return
+
         markdown.write('# Shader Overview\n')
         markdown.write('name|type|unused_uniforms\n')
         markdown.write('----|----|--------------\n')
@@ -2682,7 +2685,10 @@ class Frame:
     def writeResourceOverview(self, markdown, controller):
 
         if API_TYPE != rd.GraphicsAPI.OpenGL:
-            # TODO: support other formats
+            # TODO: support APIs besides OpenGL
+            return
+
+        if not g_frame.textures:
             return
 
         texture_tips = []
@@ -2709,7 +2715,8 @@ class Frame:
         for tip in texture_tips:
             file_name = get_resource_filename(get_resource_name(controller, tip.resource_id), IMG_EXT)
             tex_info = tip.info
-            export_texture(controller, tex_info.resourceId, file_name)
+            if config['WRITE_TEXTURE']:
+                export_texture(controller, tex_info.resourceId, file_name)
             texType = '%s' % rd.TextureType(tex_info.type)
             texType = texType.replace('TextureType.Texture', '').replace('Array','[]')
             usages = '%s' % rd.TextureCategory(tex_info.creationFlags)
@@ -2857,7 +2864,7 @@ class Frame:
                     c_filenames[idx] = get_resource_filename('%s--%04d_c%d' % (resource_name, lastDraw.draw_id, idx), IMG_EXT)
                 
                 # depth buffer section
-                if get_config()['WRITE_DEPTH_BUFFER']:
+                if config['WRITE_DEPTH_BUFFER']:
                     if lastDraw.depth_buffer != rd.ResourceId.Null():
                         resource_id = lastDraw.depth_buffer
                         resource_name = get_resource_name(controller, resource_id)
@@ -3047,24 +3054,27 @@ class Frame:
 
         self.writeShaderOverview(markdown, controller)
 
-        markdown.write("# Usage\n\n")
+        markdown.write("# Usage\n")
         markdown.write("  * Press `p` / `shift+p` to jump between Passes\n")
         markdown.write("  * Press `s` / `shift+s` to jump between States\n")
         markdown.write("  * Press `d` / `shift+d` to jump between Draws\n")
         
-        markdown.write('\n--------\n')
-        
-        markdown.write("# Summary\n\n")
-        if get_config()['WRITE_PSO_DAG']:
+        markdown.write("# Summary\n")
+        if config['WRITE_PSO_DAG']:
             markdown.write("  * Experimental feature [pipeline dag](dag.html)\n")
         markdown.write("  * RDC: %s\n" % rdc_file)
         markdown.write("  * API: %s\n" % pipelineTypes[api_prop.pipelineType])
         # markdown.write("  * Replay API: %s\n" % pipelineTypes[api_prop.localRenderer])
         markdown.write("  * GPU: %s\n" % GPUVendors[api_prop.vendor])
 
+        markdown.write("# %APPDATA%/rd.json\n")
+        markdown.write('```json\n')
+        markdown.write(json.dumps(config, indent=4))
+        markdown.write('\n```\n')
+
         markdown.close()
 
-        if get_config()['WRITE_PSO_DAG']:
+        if config['WRITE_PSO_DAG']:
             self.writeDAG()
 
     def exportResources(self, controller):
