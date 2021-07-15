@@ -45,7 +45,7 @@ config = {
     'WRITE_CONST_BUFFER' : True,
     'WRITE_PIPELINE' : True,
     'WRITE_COLOR_BUFFER' : True,
-    'WRITE_TEXTURE' : False,
+    'WRITE_TEXTURE' : True,
     'WRITE_DEPTH_BUFFER' : True,
     'WRITE_PSO_DAG' : False,
     'WRITE_SINGLE_COLOR' : False,
@@ -1711,6 +1711,22 @@ markdeep_head = """
 <script src="../src/lazysizes.js" charset="utf-8"></script>\n
 """
 
+markdeep_minimalist_head = """
+<meta charset="utf-8" emacsmode="-*- markdown -*-">
+<link rel="stylesheet" href="https://casual-effects.com/markdeep/latest/newsmag.css?">
+<script src="../src/rdc_minimalist.js" charset="utf-8"></script>
+<script src="../src/lazysizes.js" charset="utf-8"></script>
+<script src="https://casual-effects.com/markdeep/markdeep.min.js?" charset="utf-8"></script>
+<style>
+.md h1 {
+    color: #ff6600;  
+}
+.md div.title {
+    background-color: #ff6600;  
+}
+</style>
+"""
+
 markdeep_lite_head = """
 <meta charset="utf-8" emacsmode="-*- markdown -*-">
 <link rel="stylesheet" href="../src/company-api.css">
@@ -1861,7 +1877,10 @@ class Pass:
         return self.name
 
     def writeIndexHtml(self, markdown, controller):
-        markdown.write('# %s\n' % (self.getName(controller)))
+        if config['MINIMALIST']:
+            markdown.write('#### %s\n' % (self.getName(controller)))
+        else:
+            markdown.write('# %s\n' % (self.getName(controller)))
         for s in self.states:
             s.writeIndexHtml(markdown, controller)
 
@@ -1930,13 +1949,15 @@ class State:
         return self.name
 
     def writeIndexHtml(self, markdown, controller):
-        markdown.write('## %s\n' % linkable_get_resource_filename(self.getUniqueName(), 'html'))
+        if config['MINIMALIST']:
+            markdown.write('##### %s\n' % self.getUniqueName())
+        else:
+            markdown.write('## %s\n' % linkable_get_resource_filename(self.getUniqueName(), 'html'))
         # for ev in self.events:
         #     ev.writeIndexHtml(markdown, controller)
         draw_count = len(self.draws)
         if draw_count == 0:
             return
-
         if config['MINIMALIST']:
             # MINIMALIST only cares about last draw
             self.draws[-1].writeIndexHtml(markdown, controller)
@@ -2485,19 +2506,21 @@ class Draw(Event):
     def writeIndexHtml(self, markdown, controller):
         global g_assets_folder
 
-        markdown.write('### [D]%04d %s\n\n' % (self.draw_id, self.name.replace('#', '_')))
+        if config['MINIMALIST']:
+            markdown.write('**[D]%04d %s**<br>' % (self.draw_id, self.name.replace('#', '_')))
+        else:
+            markdown.write('### [D]%04d %s\n\n' % (self.draw_id, self.name.replace('#', '_')))
 
         if self.expanded_marker:
-            markdown.write('%s\n\n' % self.expanded_marker)
+            markdown.write('%s<br>' % self.expanded_marker)
     
         if self.isClear() or self.isCopy():
-            # to improve draw-level navigation by pressing 'd' and 'D'
-            markdown.write('<br><br>\n\n')
+            pass
         else:
             markdown.write('Blends: %s' % ("Enabled" if self.alpha_enabled else "Disabled"))
             markdown.write('; Depth State: %s' % ''.join(self.depth_state))
             markdown.write('; Write Mask: %s' % ''.join(self.write_mask))
-            markdown.write('\n\n')
+            markdown.write('<br>')
 
             # shader section
             for stage in range(0, rd.ShaderStage.Count):
@@ -2656,7 +2679,7 @@ class Frame:
         self.passes.append(Pass())
         Pass.current = self.passes[-1]
 
-    def getImageLinkOrNothing(self, filename, width='50%'):
+    def getImageLinkOrNothing(self, filename, width='100%'):
         if not filename:
             return ''
 
@@ -2709,7 +2732,7 @@ class Frame:
 
         markdown.write('# Resource Overview\n')
 
-        markdown.write('name|type|usage|dimension|mip|format|bytes|tips|preview\n')
+        markdown.write('name|type|usage|dimension|mip|format|bytes|tips|resource_preview\n')
         markdown.write('----|----|-----|--------:|--:|------|-----|----|-------\n')
         
         for tip in texture_tips:
@@ -2730,7 +2753,7 @@ class Frame:
                 tip.format,
                 pretty_number(tex_info.byteSize),
                 '<br>'.join(tip.tips),
-                '![](%s class="lazyload" data-src="%s" width="%s")' % ('../src/logo.png', file_name, '20%')
+                '![](%s class="lazyload" data-src="%s" width="%s")' % ('../src/logo.png', file_name, '100%')
             ))
 
         markdown.write('\n')
@@ -2740,7 +2763,7 @@ class Frame:
 
         markdown.write('# Frame Overview\n')
 
-        header =       'pass|state|draw|vertex|(ms)|marker|depth|color|blend|inst|z|c\n'
+        header =       'pass|state|draw|vertex|(ms)|marker|depth|color|blend|instance|depth_buffer|color_buffer\n'
         summary_csv.write(header.replace('|',','))
         markdown.write(header)
         markdown.write('----|-----|---:|-----:|---:|------|-----|-----|-----|---:|-|-\n')
@@ -2780,9 +2803,12 @@ class Frame:
             calls = 0
             verts = 0
             for s in p.states:
-                statesSummary += '[%s](%s.html)<br>' % (s.getName(), s.getUniqueName())
-                drawsSummary += '[%d~%d](#%s/%s)!%d<br>' % (s.draws[0].draw_id, s.draws[-1].draw_id, p.getName(controller).lower(), s.getUniqueName().lower(), len(s.draws))
-
+                if config['MINIMALIST']:
+                    statesSummary += '%s<br>' % (s.getName())
+                    drawsSummary += '[%d~%d](#drawoverview///%s/%s)!%d<br>' % (s.draws[0].draw_id, s.draws[-1].draw_id, p.getName(controller).lower(), s.getUniqueName().lower(), len(s.draws))
+                else:
+                    statesSummary += '[%s](%s.html)<br>' % (s.getName(), s.getUniqueName())
+                    drawsSummary += '[%d~%d](#%s/%s)!%d<br>' % (s.draws[0].draw_id, s.draws[-1].draw_id, p.getName(controller).lower(), s.getUniqueName().lower(), len(s.draws))
                 c = 0
                 v = 0
                 i = 0
@@ -3042,30 +3068,37 @@ class Frame:
         api_prop = controller.GetAPIProperties()
 
         # Header
-        markdown.write(markdeep_head)
-        markdown.write("**render-doctor %s**\n\n" % (rdc_file))
+        if config['MINIMALIST']:
+            markdown.write(markdeep_minimalist_head)
+        else:
+            markdown.write(markdeep_head)
+        markdown.write('**render_doctor**\n')
+        markdown.write(' %s\n' % rdc_file)
 
         self.writeFrameOverview(markdown, controller)
         self.writeResourceOverview(markdown, controller)
         self.writeAPIOverview(markdown, controller)
 
+        if config['MINIMALIST']:
+            markdown.write('# Draw Overview\n')
         for p in self.passes:
             p.writeIndexHtml(markdown, controller)
 
         self.writeShaderOverview(markdown, controller)
 
-        markdown.write("# Usage\n")
-        markdown.write("  * Press `p` / `shift+p` to jump between Passes\n")
-        markdown.write("  * Press `s` / `shift+s` to jump between States\n")
-        markdown.write("  * Press `d` / `shift+d` to jump between Draws\n")
+        if not config['MINIMALIST']:
+            markdown.write("# Usage\n")
+            markdown.write("  * Press `p` / `shift+p` to jump between Passes\n")
+            markdown.write("  * Press `s` / `shift+s` to jump between States\n")
+            markdown.write("  * Press `d` / `shift+d` to jump between Draws\n")
         
-        markdown.write("# Summary\n")
-        if config['WRITE_PSO_DAG']:
-            markdown.write("  * Experimental feature [pipeline dag](dag.html)\n")
-        markdown.write("  * RDC: %s\n" % rdc_file)
-        markdown.write("  * API: %s\n" % pipelineTypes[api_prop.pipelineType])
-        # markdown.write("  * Replay API: %s\n" % pipelineTypes[api_prop.localRenderer])
-        markdown.write("  * GPU: %s\n" % GPUVendors[api_prop.vendor])
+            markdown.write("# Summary\n")
+            if config['WRITE_PSO_DAG']:
+                markdown.write("  * Experimental feature [pipeline dag](dag.html)\n")
+            markdown.write("  * RDC: %s\n" % rdc_file)
+            markdown.write("  * API: %s\n" % pipelineTypes[api_prop.pipelineType])
+            # markdown.write("  * Replay API: %s\n" % pipelineTypes[api_prop.localRenderer])
+            markdown.write("  * GPU: %s\n" % GPUVendors[api_prop.vendor])
 
         markdown.write("# %APPDATA%/rd.json\n")
         markdown.write('```json\n')
