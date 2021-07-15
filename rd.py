@@ -2763,7 +2763,7 @@ class Frame:
 
         markdown.write('# Frame Overview\n')
 
-        header =       'pass|state|draw|vertex|(ms)|marker|depth|color|blend|instance|depth_buffer|color_buffer\n'
+        header =       'pass|state|draw|vertex|(ms)|marker|depth|color|blend|instance|depth_buffer_preview|color_buffer_preview\n'
         summary_csv.write(header.replace('|',','))
         markdown.write(header)
         markdown.write('----|-----|---:|-----:|---:|------|-----|-----|-----|---:|-|-\n')
@@ -2899,7 +2899,7 @@ class Frame:
                 for c in c_filenames:
                     if 'bloom' in statesSummary.lower() or 'bloom' in markersSummary.lower():
                         # Save html space for Bloom passes
-                        c_info += self.getImageLinkOrNothing(c, '10%')
+                        c_info += self.getImageLinkOrNothing(c, '50%')
                     else:
                         c_info += self.getImageLinkOrNothing(c)
                     
@@ -3330,8 +3330,9 @@ def generate_viz(controller):
     print('^generate_viz')
     g_frame.writeIndexHtml(index_html, controller)
 
-    for p in g_frame.passes:
-        p.writeDetailHtml(controller)
+    if not config['MINIMALIST']:
+        for p in g_frame.passes:
+            p.writeDetailHtml(controller)
   
     g_frame.exportResources(controller)
     print('$generate_viz')
