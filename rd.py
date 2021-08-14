@@ -1738,7 +1738,7 @@ mermaid_head = """
 """
 
 rdc_file = '.rdc'
-
+sdfile = None
 class TextureTip:
     def __init__(self, controller, resource_id):
         self.resource_id = resource_id
@@ -2024,8 +2024,6 @@ class Event:
         global api_full_log
         global api_short_log
         global g_next_draw_will_add_state
-
-        sdfile = controller.GetStructuredFile()
         chunks = sdfile.chunks
         self.chunk_id = ev.chunkIndex
         self.event_id = ev.eventId
@@ -2074,14 +2072,15 @@ class Event:
 class Draw(Event):
     def __init__(self, controller, draw, level = 0):
         global api_full_log
-        global api_short_log
-        print('draw %d: %s\n' % (draw.drawcallId, draw.name))
-        api_full_log.write('%sdraw_%04d %s\n' % ('    ' * level, draw.drawcallId, draw.name))
-        api_short_log.write('%s%04d %s\n' % ('    ' * level, draw.drawcallId, draw.name))
+        global api_short_logc
+        action_name = draw.GetName(sdfile)
+        print('draw %d: %s\n' % (draw.actionId, action_name))
+        api_full_log.write('%sdraw_%04d %s\n' % ('    ' * level, draw.actionId, action_name))
+        api_short_log.write('%s%04d %s\n' % ('    ' * level, draw.actionId, action_name))
         self.draw_desc = draw
         self.event_id = draw.eventId
-        self.draw_id = draw.drawcallId
-        self.name = draw.name
+        self.draw_id = draw.actionId
+        self.name = action_name # TODO:
         self.level = level
         self.state_key = ''
         self.short_shader_names = [None] * rd.ShaderStage.Count
@@ -2488,7 +2487,6 @@ class Draw(Event):
     
     def writeDetailHtml(self, markdown, controller):
         self.writeIndexHtml(markdown, controller)
-        sdfile = controller.GetStructuredFile()
         chunks = sdfile.chunks
 
         for ev in self.draw_desc.events:
@@ -2607,7 +2605,7 @@ class Draw(Event):
                     export_texture(controller, resource_id, file_name)
 
     draw_id = None
-    draw_desc = None # struct DrawcallDescription
+    draw_desc = None # struct ActionDescription
     shader_names = None
     state_key = None
     color_buffers = None
@@ -3205,7 +3203,7 @@ def visit_draw(controller, draw, level = 0):
     # hack level
     global g_markers, g_next_draw_will_add_state
     global api_full_log, api_short_log
-    if draw.name == 'API Calls':
+    if draw.GetName(sdfile)  == 'API Calls':
         pass
     
     needsPopMarker = False
@@ -3216,11 +3214,11 @@ def visit_draw(controller, draw, level = 0):
             new_event = Event(controller, ev, level)
             State.current.addEvent(new_event)
 
-        if draw.flags & rd.DrawFlags.Drawcall \
-            or draw.flags & rd.DrawFlags.Dispatch \
-            or draw.flags & rd.DrawFlags.MultiDraw \
-            or draw.flags & rd.DrawFlags.Clear \
-            or draw.flags & rd.DrawFlags.Copy:
+        if draw.flags & rd.ActionFlags.Drawcall \
+            or draw.flags & rd.ActionFlags.Dispatch \
+            or draw.flags & rd.ActionFlags.MultiAction \
+            or draw.flags & rd.ActionFlags.Clear \
+            or draw.flags & rd.ActionFlags.Copy:
             new_draw = Draw(controller, draw, level)
 
             if g_next_draw_will_add_state:
@@ -3238,7 +3236,7 @@ def visit_draw(controller, draw, level = 0):
         # regime call, skip for now
         # TODO: leverate getSafeName()
         api_full_log.write('%s%04d %s\n' % ('    ' * level, draw.eventId, draw.name))
-        api_short_log.write('%s%04d %s\n' % ('    ' * level, draw.drawcallId, draw.name))
+        api_short_log.write('%s%04d %s\n' % ('    ' * level, draw.actionId, draw.name))
         items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').replace('-',' ').replace('=>',' ').replace('#',' ').split()
         name = '_'.join(items)
 
@@ -3301,13 +3299,13 @@ def get_resource_name(controller, resource_id, get_safe_name = True):
 def generate_raw_data(controller):
     print('^generate_raw_data')
     # Start iterating from the first real draw as a child of markers
-    # draw type = DrawcallDescription
+    # draw type = ActionDescription
     global API_TYPE
     api_prop = controller.GetAPIProperties()
     API_TYPE = api_prop.pipelineType
     print('API_TYPE', API_TYPE)
 
-    draws = controller.GetDrawcalls()
+    draws = controller.GetRootActions()
     draw = draws[0]
 
     while len(draw.children) > 0:
@@ -3445,7 +3443,10 @@ def rdc_main(controller):
     global index_html
     global api_full_log, api_short_log
     global config
-    
+    global sdfile
+
+    sdfile = controller.GetStructuredFile()
+
     config_json = Path(os.getenv('APPDATA'), 'rd.json')
 
     try:
