@@ -6,7 +6,7 @@ import struct
 
 uv_float_idx = 0
 
-def process_mesh(in_bin_filename, in_obj_filename, stride, flip_v, out_filename):
+def process_mesh(uv_bin_filename, in_obj_filename, stride, flip_v, out_filename):
     global uv_float_idx
     uv_float_idx = 0
     uv_floats = []
@@ -24,7 +24,7 @@ def process_mesh(in_bin_filename, in_obj_filename, stride, flip_v, out_filename)
         # print(fh.idx())
         pass
 
-    with open(in_bin_filename, 'rb') as f:
+    with open(uv_bin_filename, 'rb') as f:
         word = f.read(4)
         while word:
             result = struct.unpack('f', word)[0]
@@ -48,13 +48,21 @@ mtllib head-uv.mtl
 usemtl STARTUP_MATERIAL_S80U052_FW00_
 '''
 
-# process_mesh('d:/dump/VBV/4169.bin', '../ggs/sol-body.obj', 16, False, '../ggs/sol-body-with-uv.obj')
-# process_mesh('d:/dump/VBV/4551.bin', '../ggs/sol-head.obj', 16, False, '../ggs/sol-head-uv.obj')
+# 178.json
+# process_mesh('d:/dump/VBV/4169.bin', '../ggs/sol-body.obj', 16, False, '../ggs/sol-body-full.obj')
+# 162.json
+# process_mesh('d:/dump/VBV/4551.bin', '../ggs/sol-head.obj', 16, False, '../ggs/sol-head-full.obj')
 
-# process_mesh('d:/dump/VBV/8671.bin', '../ggs/chipp/head.obj', 16, False, '../ggs/chipp/head-uv.obj')
-# process_mesh('d:/dump/VBV/7995.bin', '../ggs/chipp/body.obj', 24, False, '../ggs/chipp/body-uv.obj')
+# 946.json
+# process_mesh('d:/dump/VBV/8671.bin', '../ggs/chipp/head.obj', 16, False, '../ggs/chipp/head-full.obj')
+# 890.json
+# process_mesh('d:/dump/VBV/7995.bin', '../ggs/chipp/body.obj', 24, False, '../ggs/chipp/body-full.obj')
 
-# process_mesh('d:/dump/VBV/5755.bin', '../ggs/giovanna/head.obj', 24, True, '../ggs/giovanna/head-uv.obj')
-# process_mesh('d:/dump/VBV/5755.bin', '../ggs/giovanna/hair.obj', 24, True, '../ggs/giovanna/hair-uv.obj')
-process_mesh('d:/dump/VBV/5812.bin', '../ggs/giovanna/body.obj', 24, True, '../ggs/giovanna/body-uv.obj')
-process_mesh('d:/dump/VBV/5812.bin', '../ggs/giovanna/cloth.obj', 24, True, '../ggs/giovanna/cloth-uv.obj')
+# 759.json
+# process_mesh('d:/dump/VBV/5755.bin', '../ggs/giovanna/head.obj', 24, True, '../ggs/giovanna/head-full.obj')
+# 810.json
+# process_mesh('d:/dump/VBV/5755.bin', '../ggs/giovanna/hair.obj', 24, True, '../ggs/giovanna/hair-full.obj')
+# 808.json
+process_mesh('d:/dump/VBV/5812.bin', '../ggs/giovanna/body.obj', 24, True, '../ggs/giovanna/body-full.obj')
+# 809.json
+# process_mesh('d:/dump/VBV/5812.bin', '../ggs/giovanna/cloth.obj', 24, True, '../ggs/giovanna/cloth-full.obj')
