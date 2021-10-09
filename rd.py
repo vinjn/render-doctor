@@ -3400,10 +3400,10 @@ def get_cbuffer_contents(controller, stage, shader_name, refl, program_name):
     for slot in range(0, 4):
         cb = pipe.GetConstantBuffer(stage, slot, 0)
 
-        cbufferVars = controller.GetCBufferVariableContents(api_state,
-                                                            pipe.GetShader(stage),
-                                                            pipe.GetShaderEntryPoint(stage), slot,
-                                                            cb.resourceId, cb.byteOffset, cb.byteSize)
+        cbufferVars = controller.GetCBufferVariableContents(api_state, pipe.GetShader(stage),
+                                                            stage, pipe.GetShaderEntryPoint(stage), 
+                                                            slot, cb.resourceId,
+                                                            cb.byteOffset, cb.byteSize)
 
         if not cbufferVars:
             break
