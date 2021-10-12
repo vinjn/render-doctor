@@ -2823,8 +2823,8 @@ class Frame:
                         v += d.draw_desc.numIndices * d.draw_desc.numInstances
                     else:
                         v += d.draw_desc.numIndices
-                    # if not d.isClear() and not d.isCopy():
-                    m += d.gpu_duration * 1e3
+                    if not d.isClear() and not d.isCopy():
+                        m += d.gpu_duration * 1e3
 
                 drawCountsSummary += '%d<br>' % len(s.draws)
                 callsSummary += '%d<br>' % c
