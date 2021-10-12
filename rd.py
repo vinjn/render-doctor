@@ -2739,7 +2739,7 @@ class Frame:
             if config['WRITE_TEXTURE']:
                 export_texture(controller, tex_info.resourceId, file_name)
             texType = '%s' % rd.TextureType(tex_info.type)
-            texType = texType.replace('TextureType.Texture', '').replace('Array','[]')
+            texType = texType.replace('TextureType.', '').replace('Array','[ ]')
             usages = '%s' % rd.TextureCategory(tex_info.creationFlags)
             usages = usages.replace('TextureCategory.', '').replace('ShaderRead','T').replace('ColorTarget','C').replace('DepthTarget','Z').replace('|',''),
             markdown.write('%s|%s|%s|%s|%d|%s|%s|%s|%s\n' % (
@@ -3199,11 +3199,14 @@ def get_marker_name():
     return ''
 
 # Define a recursive function for iterating over draws
-def visit_draw(controller, draw, level = 0):
+def visit_action(controller, draw, level = 0):
     # hack level
     global g_markers, g_next_draw_will_add_state
     global api_full_log, api_short_log
-    if draw.GetName(sdfile)  == 'API Calls':
+    action_name = draw.GetName(sdfile)
+
+    # print(action_name)
+    if action_name == 'API Calls':
         pass
     
     needsPopMarker = False
@@ -3232,20 +3235,20 @@ def visit_draw(controller, draw, level = 0):
 
             new_draw.collectPipeline(controller)
             State.current.addDraw(new_draw)
-    else:
-        # regime call, skip for now
-        # TODO: leverate getSafeName()
-        api_full_log.write('%s%04d %s\n' % ('    ' * level, draw.eventId, draw.name))
-        api_short_log.write('%s%04d %s\n' % ('    ' * level, draw.actionId, draw.name))
-        items = draw.name.replace('|',' ').replace('(',' ').replace(')',' ').replace('-',' ').replace('=>',' ').replace('#',' ').split()
-        name = '_'.join(items)
+        elif draw.flags & rd.ActionFlags.PushMarker:
+            # regime call, skip for now
+            # TODO: leverate getSafeName()
+            api_full_log.write('%s%04d %s\n' % ('    ' * level, draw.eventId, action_name))
+            api_short_log.write('%s%04d %s\n' % ('    ' * level, draw.actionId, action_name))
+            items = action_name.replace('|',' ').replace('(',' ').replace(')',' ').replace('-',' ').replace('=>',' ').replace('#',' ').split()
+            name = '_'.join(items)
 
-        g_markers.append(name)
-        needsPopMarker = True
+            g_markers.append(name)
+            needsPopMarker = True
 
     # Iterate over the draw's children
     for draw in draw.children:
-        visit_draw(controller, draw, level + 1)
+        visit_action(controller, draw, level + 1)
 
     if needsPopMarker:
         g_markers.pop()
@@ -3305,15 +3308,10 @@ def generate_raw_data(controller):
     API_TYPE = api_prop.pipelineType
     print('API_TYPE', API_TYPE)
 
-    draws = controller.GetRootActions()
-    draw = draws[0]
-
-    while len(draw.children) > 0:
-        draw = draw.children[0]
-
+    actions = controller.GetRootActions()
     # Iterate over all of the root drawcalls
-    for d in draws:
-        visit_draw(controller, d)
+    for d in actions:
+        visit_action(controller, d)
 
     print('$generate_raw_data')
 
@@ -3469,9 +3467,7 @@ def rdc_main(controller):
         api_short_log = open(g_assets_folder / 'api_short.txt',"w") 
 
         report_name = g_assets_folder / 'index.html'
-        if 'atelier' in g_assets_folder.stem:
-            # WAR: make specific reports smaller
-            config['WRITE_TEXTURE'] = False
+
 
         fetch_gpu_counters(controller)
         generate_raw_data(controller)
