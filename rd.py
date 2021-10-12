@@ -2761,10 +2761,10 @@ class Frame:
 
         markdown.write('# Frame Overview\n')
 
-        header =       'pass|state|draw|vertex|(ms)|marker|depth|color|blend|instance|depth_buffer_preview|color_buffer_preview\n'
+        header =       'pass|state|draw|call|vertex|(ms)|marker|depth|color|blend|instance|depth_buffer_preview|color_buffer_preview\n'
         summary_csv.write(header.replace('|',','))
         markdown.write(header)
-        markdown.write('----|-----|---:|-----:|---:|------|-----|-----|-----|---:|-|-\n')
+        markdown.write('----|-----|---:|---:|-----:|---:|------|-----|-----|-----|---:|-|-\n')
         overviewText = ''
 
         # TODO: so ugly
@@ -2837,7 +2837,7 @@ class Frame:
                 colorSummary += '%s<br>' % ''.join(s.draws[-1].write_mask) #----
                 blendSummary += '%s<br>' % ('ON' if s.draws[-1].alpha_enabled else '')  #----
 
-                summary_csv.write('%s,%s,%d,%d,%.3f,%s,%d,%s,%s\n' %(p.getName(controller).lower(), s.getName(), len(s.draws), v,
+                summary_csv.write('%s,%s,%d,%d,%d,%.3f,%s,%d,%s,%s\n' %(p.getName(controller).lower(), s.getName(), len(s.draws), c, v,
                     m, s.draws[-1].marker, 
                     i,
                     s.vs_name or s.cs_name, s.ps_name or ''))
@@ -2901,8 +2901,8 @@ class Frame:
                     else:
                         c_info += self.getImageLinkOrNothing(c)
                     
-            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
-            (p.getName(controller), p.getName(controller).lower(), statesSummary, drawsSummary, vertsSummary, 
+            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
+            (p.getName(controller), p.getName(controller).lower(), statesSummary, drawsSummary, callsSummary, vertsSummary, 
                 timeSummary, 
                 markersSummary, 
                 depthSummary, #----
@@ -2917,8 +2917,8 @@ class Frame:
         if has_copy_state:
             # remove "Copy" state
             uniqueStateCounter -= 1            
-        overviewText = ('%s|%s|[%s](api_short.txt)|%s|%s|''|''|''|''|%s|%s|%s\n' % 
-        ('sum: %d' % totalPasses, 'sum: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%d' % totalDraws, pretty_number(totalVerts), '%.2f' % totalTime, \
+        overviewText = ('%s|%s|[%s](api_short.txt)|[%s](api_full.txt)|%s|%s|''|''|''|''|%s|%s|%s\n' % 
+        ('sum: %d' % totalPasses, 'sum: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%d' % totalDraws, '%d' % totalCalls, pretty_number(totalVerts), '%.2f' % totalTime, \
              '%d' % totalInstances,  '', '')) + overviewText
         
         markdown.write(overviewText)
