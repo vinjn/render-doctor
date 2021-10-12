@@ -2761,10 +2761,10 @@ class Frame:
 
         markdown.write('# Frame Overview\n')
 
-        header =       'pass|state|draw|call|vertex|(ms)|marker|depth|color|blend|instance|depth_buffer_preview|color_buffer_preview\n'
+        header =       'pass|state|range|draw|call|vertex|(ms)|marker|depth|color|blend|instance|depth_buffer_preview|color_buffer_preview\n'
         summary_csv.write(header.replace('|',','))
         markdown.write(header)
-        markdown.write('----|-----|---:|---:|-----:|---:|------|-----|-----|-----|---:|-|-\n')
+        markdown.write('----|-----|----:|---:|---:|-----:|---:|------|-----|-----|-----|---:|-|-\n')
         overviewText = ''
 
         # TODO: so ugly
@@ -2790,6 +2790,7 @@ class Frame:
             colorSummary = '' #----
             blendSummary = '' #----
             drawsSummary = ''
+            drawCountsSummary = ''
             callsSummary = ''
             vertsSummary = ''
             instancesSummary = ''
@@ -2803,26 +2804,29 @@ class Frame:
             for s in p.states:
                 if config['MINIMALIST']:
                     statesSummary += '%s<br>' % (s.getName())
-                    drawsSummary += '[%d~%d](#drawoverview///%s/%s)!%d<br>' % (s.draws[0].draw_id, s.draws[-1].draw_id, p.getName(controller).lower(), s.getUniqueName().lower(), len(s.draws))
+                    if len(s.draws) == 1:
+                        drawsSummary += '[<%d>](#drawoverview///%s/%s)<br>' % (s.draws[0].draw_id, p.getName(controller).lower(), s.getUniqueName().lower())
+                    else:
+                        drawsSummary += '[%d~%d](#drawoverview///%s/%s)<br>' % (s.draws[0].draw_id, s.draws[-1].draw_id, p.getName(controller).lower(), s.getUniqueName().lower())
                 else:
                     statesSummary += '[%s](%s.html)<br>' % (s.getName(), s.getUniqueName())
-                    drawsSummary += '[%d~%d](#%s/%s)!%d<br>' % (s.draws[0].draw_id, s.draws[-1].draw_id, p.getName(controller).lower(), s.getUniqueName().lower(), len(s.draws))
+                    drawsSummary += '[%d~%d](#%s/%s)<br>' % (s.draws[0].draw_id, s.draws[-1].draw_id, p.getName(controller).lower(), s.getUniqueName().lower())
                 c = 0
                 v = 0
                 i = 0
                 m = 0
                 draws += len(s.draws)
                 for d in s.draws:
-                    if d.isClear() or d.isCopy():
-                        continue
                     c += len(d.draw_desc.events)
                     if d.draw_desc.numInstances > 1:
                         i += d.draw_desc.numInstances
                         v += d.draw_desc.numIndices * d.draw_desc.numInstances
                     else:
                         v += d.draw_desc.numIndices
+                    # if not d.isClear() and not d.isCopy():
                     m += d.gpu_duration * 1e3
 
+                drawCountsSummary += '%d<br>' % len(s.draws)
                 callsSummary += '%d<br>' % c
                 vertsSummary += '%s<br>' % pretty_number(v)
                 instancesSummary += '%d<br>' % i
@@ -2855,9 +2859,10 @@ class Frame:
                     states += 1
                 instances += i
 
-            if states > 1:
+            if states > 1 or (states == 1 and (has_clear_state or has_copy_state)):
                 statesSummary += '~%d<br>' % states
-                drawsSummary += '~%d<br>' % draws
+                drawsSummary += '<br>'
+                drawCountsSummary += '~%d<br>' % draws
                 instancesSummary += '~%d<br>' % instances
                 callsSummary += '~%d<br>' % calls
                 vertsSummary += '~%s<br>' % pretty_number(verts)
@@ -2901,8 +2906,9 @@ class Frame:
                     else:
                         c_info += self.getImageLinkOrNothing(c)
                     
-            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
-            (p.getName(controller), p.getName(controller).lower(), statesSummary, drawsSummary, callsSummary, vertsSummary, 
+            # summary row for the pass
+            overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
+            (p.getName(controller), p.getName(controller).lower(), statesSummary, drawsSummary, drawCountsSummary, callsSummary, vertsSummary, 
                 timeSummary, 
                 markersSummary, 
                 depthSummary, #----
@@ -2916,8 +2922,10 @@ class Frame:
             uniqueStateCounter -= 1
         if has_copy_state:
             # remove "Copy" state
-            uniqueStateCounter -= 1            
-        overviewText = ('%s|%s|[%s](api_short.txt)|[%s](api_full.txt)|%s|%s|''|''|''|''|%s|%s|%s\n' % 
+            uniqueStateCounter -= 1
+            
+        # the top row
+        overviewText = ('%s|%s|''|[%s](api_short.txt)|[%s](api_full.txt)|%s|%s|''|''|''|''|%s|%s|%s\n' % 
         ('sum: %d' % totalPasses, 'sum: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%d' % totalDraws, '%d' % totalCalls, pretty_number(totalVerts), '%.2f' % totalTime, \
              '%d' % totalInstances,  '', '')) + overviewText
         
