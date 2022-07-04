@@ -15,7 +15,7 @@
 # C:\svn_pool\renderdoc\renderdoc\api\replay\replay_enums.h
 
 # replay the trace to get state, needs gpu
-# C:\svn_pool\renderdoc\renderdoc\replay\replay_controller.h 
+# C:\svn_pool\renderdoc\renderdoc\replay\replay_controller.h
 
 # TODO
 # [] Add a json layer for generate_raw_data, separate raw_data and controller
@@ -1719,10 +1719,10 @@ markdeep_minimalist_head = """
 <script src="https://casual-effects.com/markdeep/markdeep.min.js?" charset="utf-8"></script>
 <style>
 .md h1 {
-    color: #ff6600;  
+    color: #ff6600;
 }
 .md div.title {
-    background-color: #ff6600;  
+    background-color: #ff6600;
 }
 </style>
 """
@@ -1748,7 +1748,7 @@ class TextureTip:
         self.format = rd.ResourceFormat(self.info.format).Name()
 
         self.tips = []
- 
+
         # doctor jobs...
         if self.info.creationFlags & rd.TextureCategory.ColorTarget:
             if 'R16G16B16A16_FLOAT' in self.format:
@@ -1773,7 +1773,7 @@ class TextureTip:
                 elif fmt.compByteWidth == 2 and fmt.compType == rd.CompType.Float:
                     unpack_string = 'e' * fmt.compCount
                 elif fmt.compByteWidth == 4 and fmt.compType == rd.CompType.Float:
-                    unpack_string = 'f' * fmt.compCount                
+                    unpack_string = 'f' * fmt.compCount
                 else:
                     unpack_string = ''
 
@@ -1785,7 +1785,7 @@ class TextureTip:
                             is_single_color = False
                             break
                         prev_pixel = pixel
-            
+
                     if is_single_color:
                         self.tips.append('single_color' + str(prev_pixel))
 
@@ -1812,7 +1812,7 @@ class ShaderDoctor:
         pass
 
 '''
-PPD (Pass - State - Draw) hierachy, there could be other hierachies, so I need to separate <derived data> from <raw data>
+PSD (Pass - State - Draw) hierachy, there could be other hierachies, so I need to separate <derived data> from <raw data>
 
 Frame
     - Pass
@@ -1932,13 +1932,13 @@ class State:
     def getFirstDraw(self):
         if len(self.draws) == 0:
             return None
-        
+
         return self.draws[0]
 
     def getLastDraw(self):
         if len(self.draws) == 0:
             return None
-        
+
         return self.draws[-1]
 
     def getUniqueName(self):
@@ -1993,7 +1993,7 @@ class State:
                 # MINIMALIST only cares about last draw
                 self.draws[-1].exportResources(controller)
                 return
-             
+
             if draw_count == 1:
                 self.draws[0].exportResources(controller)
             elif draw_count == 2:
@@ -2369,7 +2369,7 @@ class Draw(Event):
                                 if resource_id == rd.ResourceId.Null():
                                     continue
                                 if not get_texture_info(controller, resource_id):
-                                    continue                                
+                                    continue
                                 g_frame.textures.add(resource_id)
                                 self.textures.append(resource_id)
 
@@ -2430,7 +2430,7 @@ class Draw(Event):
                     if blend.writeMask & 0b1000: self.write_mask[3] = 'A'
                     # TODO: support MRT
                     break
-            
+
         if self.state_key != State.current.getName():
             # detects a PSO change
             # TODO: this is too ugly
@@ -2449,7 +2449,7 @@ class Draw(Event):
         if self.depth_buffer != rd.ResourceId.Null():
             depth_count += 1
             if not texture_info:
-                texture_info = get_texture_info(controller, self.depth_buffer)            
+                texture_info = get_texture_info(controller, self.depth_buffer)
         if depth_count > 0:
             summary = 'z'
         else:
@@ -2484,7 +2484,7 @@ class Draw(Event):
         # caption_suffix, texture_info_text
         markdown.write('![%s `%s`](%s class="lazyload" data-src="%s" border="2")' % (caption_suffix, texture_info_text, "../src/logo.png", texture_file_name))
         # markdown.write('![%s `%s`](%s class="lazyload" loading="lazy" border="2")' % (caption_suffix, texture_info_text, texture_file_name))
-    
+
     def writeDetailHtml(self, markdown, controller):
         self.writeIndexHtml(markdown, controller)
         chunks = sdfile.chunks
@@ -2511,7 +2511,7 @@ class Draw(Event):
 
         if self.expanded_marker:
             markdown.write('%s<br>' % self.expanded_marker)
-    
+
         if self.isClear() or self.isCopy():
             pass
         else:
@@ -2544,7 +2544,7 @@ class Draw(Event):
                     # TODO: ugly
                     file_name = get_resource_filename('%s--%04d_c%d' % (resource_name, self.draw_id, idx), IMG_EXT)
                     self.writeTextureMarkdown(markdown, controller, 'c%d: %s' % (idx, resource_name), resource_id, file_name)
-            
+
             # depth buffer section
             if config['WRITE_DEPTH_BUFFER']:
                 if self.depth_buffer != rd.ResourceId.Null():
@@ -2585,7 +2585,7 @@ class Draw(Event):
                 resource_name = get_resource_name(controller, resource_id)
                 file_name = get_resource_filename(resource_name, IMG_EXT)
                 export_texture(controller, resource_id, file_name)
-                
+
         # WRITE render targtes (aka outputs)
         if config['WRITE_COLOR_BUFFER']:
             for idx, resource_id in enumerate(self.color_buffers):
@@ -2661,7 +2661,7 @@ def pretty_number(num):
     return str(num)
 
 class Frame:
-    # 
+    #
     def __init__(self):
         self.passes = []
         self.textures = set()
@@ -2732,7 +2732,7 @@ class Frame:
 
         markdown.write('name|type|usage|dimension|mip|format|bytes|tips|resource_preview\n')
         markdown.write('----|----|-----|--------:|--:|------|-----|----|-------\n')
-        
+
         for tip in texture_tips:
             file_name = get_resource_filename(get_resource_name(controller, tip.resource_id), IMG_EXT)
             tex_info = tip.info
@@ -2891,7 +2891,7 @@ class Frame:
                         continue
                     resource_name = get_resource_name(controller, resource_id)
                     c_filenames[idx] = get_resource_filename('%s--%04d_c%d' % (resource_name, lastDraw.draw_id, idx), IMG_EXT)
-                
+
                 # depth buffer section
                 if config['WRITE_DEPTH_BUFFER']:
                     if lastDraw.depth_buffer != rd.ResourceId.Null():
@@ -2905,7 +2905,7 @@ class Frame:
                         c_info += self.getImageLinkOrNothing(c, '50%')
                     else:
                         c_info += self.getImageLinkOrNothing(c)
-                    
+
             # summary row for the pass
             overviewText += ('[%s](#%s)|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' % 
             (p.getName(controller), p.getName(controller).lower(), statesSummary, drawsSummary, drawCountsSummary, callsSummary, vertsSummary, 
@@ -2915,7 +2915,7 @@ class Frame:
                 colorSummary, #----
                 blendSummary, #----
                 instancesSummary, self.getImageLinkOrNothing(z_filename), c_info))
-        
+
         uniqueStateCounter = len(uniqueStateCounters)
         if has_clear_state:
             # remove "Clear" state
@@ -2923,12 +2923,12 @@ class Frame:
         if has_copy_state:
             # remove "Copy" state
             uniqueStateCounter -= 1
-            
+
         # the top row
         overviewText = ('%s|%s|''|[%s](api_short.txt)|[%s](api_full.txt)|%s|%s|''|''|''|''|%s|%s|%s\n' % 
         ('sum: %d' % totalPasses, 'sum: %d<br>unique: %d' % (totalStates, uniqueStateCounter), '%d' % totalDraws, '%d' % totalCalls, pretty_number(totalVerts), '%.2f' % totalTime, \
              '%d' % totalInstances,  '', '')) + overviewText
-        
+
         markdown.write(overviewText)
         markdown.write('\n')
 
@@ -2980,7 +2980,7 @@ class Frame:
                 next = self.passes[i+1]
                 markdown.write('%s -.-> %s\n' % (p.getName(controller), next.getName()))
         markdown.writelines('</div>\n\n')
-        
+
         # linear order
         dag = set()
         # markdown.write('<h1>PSO diagram</h1>\n')
@@ -2988,7 +2988,7 @@ class Frame:
         # markdown.write('graph LR\n')
 
         # state_count = len(g_states)
-        
+
         # for i in range(1, state_count):
         #     src = g_states[i]
         #     markdown.write('%s ==> %s\n' % (g_states[i-1].name, g_states[i].name))
@@ -2999,7 +2999,7 @@ class Frame:
         #             dst = g_states[j]
         #             for t in dst.getFirstDraw().textures:
         #                 if t == rd.ResourceId.Null():
-        #                     continue                        
+        #                     continue
         #                 if c == t:
         #                     # src.c becomes dst.t
         #                     dag.add((src, dst, get_resource_name(controller, c)))
@@ -3097,7 +3097,7 @@ class Frame:
             markdown.write("  * Press `p` / `shift+p` to jump between Passes\n")
             markdown.write("  * Press `s` / `shift+s` to jump between States\n")
             markdown.write("  * Press `d` / `shift+d` to jump between Draws\n")
-        
+
             markdown.write("# Summary\n")
             if config['WRITE_PSO_DAG']:
                 markdown.write("  * Experimental feature [pipeline dag](dag.html)\n")
@@ -3216,7 +3216,7 @@ def visit_action(controller, draw, level = 0):
     # print(action_name)
     if action_name == 'API Calls':
         pass
-    
+
     needsPopMarker = False
     # print(rd.GLChunk.glPopGroupMarkerEXT)
     if draw.events:
@@ -3272,7 +3272,7 @@ def get_texture_info(controller, resource_id):
     for res in textures:
         if resource_id == res.resourceId:
             return res
-    
+
     return None
 
 resource_name_count = {}
@@ -3300,7 +3300,7 @@ def get_resource_name(controller, resource_id, get_safe_name = True):
                     name = getSafeName(res.name)
                 else:
                     name = res.name
-                
+
                 if count > 0:
                     name = '%s_%d' % (name, count)
                 resource_name_dict[resource_id] = name
@@ -3326,7 +3326,7 @@ def generate_raw_data(controller):
 def generate_derived_data(controller):
 
     print('^generate_derived_data')
-    
+
     print('$generate_derived_data')
 
 
@@ -3337,7 +3337,7 @@ def generate_viz(controller):
     if not config['MINIMALIST']:
         for p in g_frame.passes:
             p.writeDetailHtml(controller)
-  
+
     g_frame.exportResources(controller)
     print('$generate_viz')
     print("%s\n" % (report_name))
@@ -3410,14 +3410,14 @@ def get_cbuffer_contents(controller, stage, shader_name, refl, program_name):
         from distutils.version import LooseVersion
         if LooseVersion(ver) >= LooseVersion('1.17'):
             cbufferVars = controller.GetCBufferVariableContents(api_state, pipe.GetShader(stage),
-                                                                stage, pipe.GetShaderEntryPoint(stage), 
+                                                                stage, pipe.GetShaderEntryPoint(stage),
                                                                 slot, cb.resourceId,
                                                                 cb.byteOffset, cb.byteSize)
         else:
             cbufferVars = controller.GetCBufferVariableContents(api_state,
                                                                 pipe.GetShader(stage),
                                                                 pipe.GetShaderEntryPoint(stage), slot,
-                                                                cb.resourceId, cb.byteOffset, cb.byteSize)            
+                                                                cb.resourceId, cb.byteOffset, cb.byteSize)
 
         if not cbufferVars:
             break
@@ -3471,8 +3471,8 @@ def rdc_main(controller):
             f.write(json.dumps(config, indent=4))
 
     try:
-        api_full_log = open(g_assets_folder / 'api_full.txt',"w") 
-        api_short_log = open(g_assets_folder / 'api_short.txt',"w") 
+        api_full_log = open(g_assets_folder / 'api_full.txt',"w")
+        api_short_log = open(g_assets_folder / 'api_short.txt',"w")
 
         report_name = g_assets_folder / 'index.html'
 
@@ -3481,7 +3481,7 @@ def rdc_main(controller):
         generate_raw_data(controller)
         generate_derived_data(controller)
 
-        index_html = open(report_name,"w") 
+        index_html = open(report_name,"w")
         generate_viz(controller)
 
         api_full_log.close()
@@ -3502,7 +3502,7 @@ if 'pyrenderdoc' in globals():
         from datetime import datetime
         g_assets_folder = g_assets_folder + '-' + datetime.now().strftime("%Y-%b-%d-%H-%M-%S")
     g_assets_folder.mkdir(parents=True, exist_ok=True)
-    
+
     pyrenderdoc.Replay().BlockInvoke(rdc_main)
 else:
     if len(sys.argv) > 1:
